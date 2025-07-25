@@ -1,0 +1,153 @@
+name: Publish Package
+
+on:
+  push:
+    tags:
+      - "v*"  # Trigger on tags that start with 'v', such as v0.1.0
+
+jobs:
+  verify-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Get tag version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+
+      - name: Extract version from pyproject.toml
+        id: get_toml_version
+        run: |
+          TOML_VERSION=$(grep -m 1 "version" pyproject.toml | cut -d '"' -f2)
+          echo "TOML_VERSION=${TOML_VERSION}" >> $GITHUB_ENV
+          echo "Version from pyproject.toml: ${TOML_VERSION}"
+          echo "Version from tag: ${{ env.VERSION }}"
+
+      - name: Verify versions match
+        run: |
+          if [ "${{ env.VERSION }}" != "${{ env.TOML_VERSION }}" ]; then
+            echo "Error: Version in pyproject.toml (${{ env.TOML_VERSION }}) does not match tag version (${{ env.VERSION }})"
+            exit 1
+          else
+            echo "Versions match!"
+          fi
+
+  build:
+    needs: verify-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          poetry install --with dev,docs
+
+      - name: Run tests
+        run: |
+          poetry run pytest tests/
+
+      - name: Build package
+        run: |
+          poetry build
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  publish-docs:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          poetry install --with docs
+
+      - name: Generate RST files
+        run: |
+          cd ${{ github.workspace }}
+          poetry run python docs/generate_docs.py
+
+      - name: Build documentation
+        run: |
+          cd ${{ github.workspace }}/docs
+          poetry run sphinx-build -b html source build/html
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ github.workspace }}/docs/build/html
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  publish-pypi:
+    needs: publish-docs
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+    permissions:
+      id-token: write  # For trusted publishing to PyPI
+
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
