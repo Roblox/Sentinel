@@ -3,7 +3,7 @@
 
 ## Overview
 
-Sentinel, part of the RoGuard safety toolkit, is a Python library designed specifically for realtime detection of extremely rare classes of text by using contrastive learning principles. While traditional classifiers struggle with highly imbalanced datasets, Sentinel excels by:
+Roblox Sentinel, part of the Roblox Safety Toolkit, is a Python library designed specifically for realtime detection of extremely rare classes of text by using contrastive learning principles. While traditional classifiers struggle with highly imbalanced datasets, Sentinel excels by:
 
 1. Collecting recent observations from a single source (e.g., recent messages from a user)
 2. Calculating individual observation scores using embedding similarity
