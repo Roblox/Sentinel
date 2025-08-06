@@ -93,10 +93,7 @@ class SentinelLocalIndex:
             `model, scale_fn = get_sentence_transformer_and_scaling_fn(encoder_model_name_or_path)`
 
             When saving the index, you must provide the exact encoder_model_name_or_path
-            as SentenceTransformer doesn't store the original model name. If needed, you can use
-            `sentinel.embeddings.sbert.extract_model_name_from_sentence_transformer(model)`
-            to attempt extracting the model name, but this is a best-effort function that returns
-            None if it cannot determine the model name.
+            as SentenceTransformer doesn't store the original model name.
 
         Use the class method `load` to load an index from S3 or local storage.
         """
@@ -139,10 +136,7 @@ class SentinelLocalIndex:
             path: Path to save the index to (local directory or S3 URI).
             encoder_model_name_or_path: Name or path of the sentence transformer encoder model used.
                 This must be the exact name used to create the SentenceTransformer as it cannot be
-                reliably extracted from the model instance. If you need to try extracting the model name
-                from an existing instance, use
-                `sentinel.embeddings.sbert.extract_model_name_from_sentence_transformer(model)`,
-                which will return the model name if it can be determined or None otherwise.
+                reliably extracted from the model instance.
             aws_access_key_id: Optional AWS access key ID for S3 access.
             aws_secret_access_key: Optional AWS secret access key for S3 access.
 

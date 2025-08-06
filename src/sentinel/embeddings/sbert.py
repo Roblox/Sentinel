@@ -46,46 +46,6 @@ def get_sentence_transformer_and_scaling_fn(
 
     return model, None
 
-
-def extract_model_name_from_sentence_transformer(
-    model: SentenceTransformer,
-) -> Optional[str]:
-    """
-    Attempt to extract the model name from a SentenceTransformer instance.
-
-    This is a best-effort function as SentenceTransformer doesn't directly store
-    the original model name. It tries to infer it from the model's configuration.
-
-    Args:
-        model: A SentenceTransformer model instance
-
-    Returns:
-        A string representing the best guess at the model name, or
-        None if it cannot be determined
-    """
-    # Try to get the name from the model's modules
-    if hasattr(model, "modules") and model.modules:
-        # Most SentenceTransformer models use a Transformer as the first module
-        if hasattr(model.modules[0], "auto_model") and hasattr(
-            model.modules[0].auto_model, "config"
-        ):
-            # Try to get the name from the config
-            if hasattr(model.modules[0].auto_model.config, "name_or_path"):
-                return model.modules[0].auto_model.config.name_or_path
-
-    # Try to get from the model's save directory name
-    if hasattr(model, "get_sentence_embedding_dimension") and hasattr(
-        model, "get_config_dict"
-    ):
-        config = model.get_config_dict()
-        if "__path__" in config and config["__path__"]:
-            # Extract the final path component as the model name
-            return os.path.basename(os.path.normpath(config["__path__"]))
-
-    # Return None if we can't determine the name
-    return None
-
-
 def e5_scaling_function(score: float) -> float:
     """
     Scale the similarity score for E5 embeddings.

@@ -109,11 +109,6 @@ saved_config = index.save(
     aws_access_key_id="YOUR_ACCESS_KEY_ID",  # Optional if using environment credentials
     aws_secret_access_key="YOUR_SECRET_ACCESS_KEY"  # Optional if using environment credentials
 )
-
-# If you need to extract the model name from an existing SentenceTransformer instance (best effort):
-from sentinel.embeddings.sbert import extract_model_name_from_sentence_transformer
-model_name = extract_model_name_from_sentence_transformer(model)
-# Returns the model name if it can be determined, or None otherwise
 ```
 
 ## How It Works
@@ -185,6 +180,15 @@ poetry run sphinx-build -b html source build/html
 ```
 
 Then open `docs/build/html/index.html` in your browser.
+
+## Examples
+To run the notebook examples
+```bash
+# Install with examples dependencies
+poetry install --with examples
+poetry install --extras=sbert
+poetry run jupyter notebook
+```
 
 ## License
 
