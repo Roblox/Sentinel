@@ -5,6 +5,7 @@ on:
     branches:
       - main
   pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -68,8 +69,7 @@ jobs:
               repo: context.repo.repo,
               body: '⚠️ **Documentation is out of sync with the code!**\n\nPlease run `python docs/generate_docs.py` and commit the updated documentation files.'
             })
-
-build:
+  build:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     needs: [check-docs]
