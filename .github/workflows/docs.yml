@@ -25,7 +25,7 @@ concurrency:
 jobs:
   check-docs:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     # Make this job informational only - don't block PR
     continue-on-error: true
     steps:
@@ -113,7 +113,7 @@ jobs:
 
   deploy:
     # Only deploy on push to main or workflow_dispatch, skip on PRs
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     needs: build
     environment:
       name: github-pages
