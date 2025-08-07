@@ -161,26 +161,6 @@ Sentinel supports both local file storage and S3 storage:
 
 The storage is abstracted using `smart_open`, making it seamless to switch between storage backends.
 
-## Documentation
-
-API documentation is automatically generated and deployed to GitHub Pages on each push to the main branch. You can access the documentation at:
-
-[https://roblox.github.io/sentinel/](https://roblox.github.io/sentinel/)
-
-To build the documentation locally:
-
-```bash
-# Install with documentation dependencies
-poetry install --with docs
-
-# Generate RST files and build documentation
-cd docs
-poetry run python generate_docs.py
-poetry run sphinx-build -b html source build/html
-```
-
-Then open `docs/build/html/index.html` in your browser.
-
 ## Examples
 To run the notebook examples
 ```bash
