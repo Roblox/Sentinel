@@ -165,7 +165,7 @@ The storage is abstracted using `smart_open`, making it seamless to switch betwe
 
 API documentation is automatically generated and deployed to GitHub Pages on each push to the main branch. You can access the documentation at:
 
-[https://roblox.github.io/sentinel/](https://roblox.github.io/sentinel/)
+[https://roblox.github.io/sentinel/](https://roblox.github.io/Sentinel/)
 
 To build the documentation locally:
 
