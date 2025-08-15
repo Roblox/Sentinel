@@ -21,6 +21,10 @@ from sentinel.score_formulae import (
     mean_of_positives,
     calculate_contrastive_score,
     skewness,
+    top_k_mean,
+    percentile_score,
+    softmax_weighted_mean,
+    max_score,
 )
 
 
@@ -125,3 +129,24 @@ def test_skewness():
     empty_scores = np.array([])
     result = skewness(empty_scores)
     assert np.isclose(result, 0.0), "Should return 0.0 for empty array"
+
+
+def test_additional_aggregators():
+    scores = np.array([0.0, 0.2, 0.5, 1.0, 0.7, -0.1, 0.3])
+
+    # top_k_mean
+    val = top_k_mean(scores, k=2)
+    assert np.isclose(val, np.mean([1.0, 0.7]))
+
+    # percentile_score
+    val = percentile_score(scores, q=50)
+    # positives are [0.2, 0.5, 1.0, 0.7, 0.3]; median = 0.5
+    assert np.isclose(val, 0.5)
+
+    # softmax_weighted_mean (temperature=1)
+    val = softmax_weighted_mean(scores, temperature=1.0)
+    assert val > 0.5 and val <= 1.0
+
+    # max_score
+    val = max_score(scores)
+    assert np.isclose(val, 1.0)

@@ -168,6 +168,16 @@ class TestSentinelLocalIndex:
         )
         assert all(score == 0.0 for score in result.observation_scores.values())
 
+        # Explainability fields present
+        assert result.aggregation_name is not None
+        assert isinstance(result.aggregation_stats, dict)
+        assert result.explanations is not None
+        # Each input has an explanation
+        for t in mixed_text:
+            assert t in result.explanations
+            ex = result.explanations[t]
+            assert "topk_positive" in ex and "topk_negative" in ex and "contrastive" in ex
+
 
 # Integration test combining various components
 @pytest.mark.integration
