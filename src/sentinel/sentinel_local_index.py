@@ -26,7 +26,7 @@ import torch
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import semantic_search
 
-from sentinel.score_formulae import calculate_contrastive_score, skewness
+from sentinel.score_formulae import calculate_contrastive_score, skewness, contrastive_components
 from sentinel.io.saved_index_config import SavedIndexConfig
 from sentinel.io.index_io import save_index, load_index, create_s3_transport_params
 from sentinel.embeddings.sbert import get_sentence_transformer_and_scaling_fn
@@ -253,17 +253,15 @@ class SentinelLocalIndex:
         self,
         text_samples: List[str],
         top_k: int = 5,
-        similarity_formula: Callable[
-            [List[float], List[float]], float
-        ] = calculate_contrastive_score,
+        similarity_formula: Callable[[List[float], List[float]], float] = calculate_contrastive_score,
         # Function to aggregate individual scores into an overall affinity score
         aggregation_function: Callable[[np.array], float] = skewness,
         # Margin to ignore when text is only slightly more similar to positive than negative.
         min_score_to_consider: float = 0.1,
         # Use when simulating by sampling texts from the same data indexed.
-        prevent_exact_match: bool = False,
-        encoding_additional_kwargs: Mapping[str, Any] = {},
-        show_progress_bar: bool = False,
+    prevent_exact_match: bool = False,
+    encoding_additional_kwargs: Mapping[str, Any] = {},
+    show_progress_bar: bool = False,
     ) -> RareClassAffinityResult:
         """Calculate rare class affinity for the given text samples in realtime.
 
@@ -320,7 +318,13 @@ class SentinelLocalIndex:
             top_k=top_k + additional_neighbors,
         )
 
+        # Explainability defaults (always on for transparency)
+        explain = True
+        include_neighbors = True
+        neighbors_limit = 5
+
         observation_scores = {}
+        explanations = {} if explain else None
 
         for i, q in enumerate(text_samples):
             LOG.debug("Query: %s", q)
@@ -340,6 +344,7 @@ class SentinelLocalIndex:
             similarities_topk_positive = []
             similarities_topk_negative = []
             max_h = top_k  # Number of examples to consider
+            neighbor_records = [] if include_neighbors else None
 
             # Process each match in order of similarity (highest first)
             for h, (score, corpus_id, sign) in enumerate(matches):
@@ -381,6 +386,22 @@ class SentinelLocalIndex:
                         f"[{sign}] {neighbor} (Score: {score:.4f}, Scaled Score: {scaled_score:.4f})"
                     )
 
+                if include_neighbors and len(neighbor_records) < neighbors_limit:
+                    # Keep a compact neighbor record for explainability
+                    try:
+                        corpus_id_int = int(corpus_id)
+                    except Exception:
+                        corpus_id_int = int(corpus_id) if isinstance(corpus_id, (int, np.integer)) else 0
+                    neighbor_records.append(
+                        {
+                            "sign": "+" if sign == "+" else "-",
+                            "raw_score": float(score),
+                            "scaled_score": float(scaled_score),
+                            "neighbor": neighbor,
+                            "corpus_id": corpus_id_int,
+                        }
+                    )
+
             # Ensure we have at least one similarity value for each category
             # If we didn't find any of a particular category in the top matches,
             # use the first match from the original search
@@ -409,6 +430,25 @@ class SentinelLocalIndex:
             else:
                 observation_scores[q] = score
 
+            # Per-text explainability
+            if explain:
+                pos_term, neg_term, log_ratio = contrastive_components(
+                    similarities_topk_pos=similarities_topk_positive,
+                    similarities_topk_neg=similarities_topk_negative,
+                )
+                explanations[q] = {
+                    "topk_positive": [float(x) for x in similarities_topk_positive],
+                    "topk_negative": [float(x) for x in similarities_topk_negative],
+                    "contrastive": {
+                        "positive_term": pos_term,
+                        "negative_term": neg_term,
+                        "log_ratio_unclipped": log_ratio,
+                    },
+                    "neighbors": neighbor_records[:neighbors_limit]
+                    if include_neighbors and neighbor_records is not None
+                    else None,
+                }
+
         # Calculate the overall rare class affinity score by aggregating individual scores
         # If there are no scores, default to 0.0
         if not observation_scores:
@@ -418,7 +458,21 @@ class SentinelLocalIndex:
                 np.array(list(observation_scores.values()))
             )
 
+        # Aggregation metadata for explainability
+        agg_name = getattr(aggregation_function, "__name__", str(aggregation_function))
+        agg_stats = {
+            "num_texts": len(text_samples),
+            "num_positive_scores": int(
+                np.sum(np.array(list(observation_scores.values())) > 0)
+            ),
+            "top_k_per_observation": top_k,
+            "min_score_to_consider": float(min_score_to_consider),
+        }
+
         return RareClassAffinityResult(
             rare_class_affinity_score=rare_class_score,
             observation_scores=observation_scores,
+            aggregation_name=agg_name,
+            aggregation_stats=agg_stats,
+            explanations=explanations if explain else None,
         )
