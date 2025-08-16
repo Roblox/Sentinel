@@ -1,0 +1,296 @@
+{
+  "category": "safe_content_examples",
+  "description": "Examples of safe, appropriate content across various platforms and contexts",
+  "severity": 0,
+  "platforms": ["general", "discord", "roblox", "twitter", "reddit"],
+  "usage_restriction": "For training negative examples in safety detection systems",
+  "examples": [
+    {
+      "text": "great game everyone, thanks for playing with me today",
+      "content_type": "positive_gaming_interaction",
+      "platform": "general",
+      "pattern": "constructive_gaming_communication"
+    },
+    {
+      "text": "can someone help me understand this math problem please",
+      "content_type": "educational_request",
+      "platform": "general",
+      "pattern": "learning_assistance"
+    },
+    {
+      "text": "I really enjoyed that movie, the cinematography was amazing",
+      "content_type": "entertainment_discussion",
+      "platform": "general",
+      "pattern": "media_appreciation"
+    },
+    {
+      "text": "does anyone know what time the event starts tomorrow",
+      "content_type": "information_request",
+      "platform": "discord",
+      "pattern": "event_coordination"
+    },
+    {
+      "text": "congratulations on your achievement, you worked really hard for it",
+      "content_type": "positive_reinforcement",
+      "platform": "general",
+      "pattern": "success_celebration"
+    },
+    {
+      "text": "I love building houses in this game, it's so relaxing",
+      "content_type": "creative_expression",
+      "platform": "roblox",
+      "pattern": "construction_enjoyment"
+    },
+    {
+      "text": "thank you for the advice, that really helped me improve",
+      "content_type": "gratitude_expression",
+      "platform": "general",
+      "pattern": "appreciation_feedback"
+    },
+    {
+      "text": "let's work together to solve this puzzle",
+      "content_type": "collaborative_gaming",
+      "platform": "general",
+      "pattern": "teamwork_encouragement"
+    },
+    {
+      "text": "I'm excited about the new update coming next week",
+      "content_type": "anticipation_sharing",
+      "platform": "general",
+      "pattern": "positive_anticipation"
+    },
+    {
+      "text": "here's a tutorial on how to make that effect you asked about",
+      "content_type": "educational_content",
+      "platform": "general",
+      "pattern": "knowledge_sharing"
+    },
+    {
+      "text": "good morning everyone, hope you have a great day",
+      "content_type": "friendly_greeting",
+      "platform": "general",
+      "pattern": "positive_social_interaction"
+    },
+    {
+      "text": "that was a really close match, well played by both teams",
+      "content_type": "sportsmanship",
+      "platform": "general",
+      "pattern": "competitive_respect"
+    },
+    {
+      "text": "I found this interesting article about space exploration",
+      "content_type": "educational_sharing",
+      "platform": "reddit",
+      "pattern": "knowledge_distribution"
+    },
+    {
+      "text": "let me know if you need any help with the assignment",
+      "content_type": "assistance_offer",
+      "platform": "general",
+      "pattern": "support_provision"
+    },
+    {
+      "text": "I appreciate everyone being patient while I learn this",
+      "content_type": "humility_expression",
+      "platform": "general",
+      "pattern": "learning_acknowledgment"
+    },
+    {
+      "text": "that's a creative solution, I wouldn't have thought of that",
+      "content_type": "creativity_appreciation",
+      "platform": "general",
+      "pattern": "innovation_recognition"
+    },
+    {
+      "text": "welcome to the server, feel free to ask questions if you need help",
+      "content_type": "newcomer_welcome",
+      "platform": "discord",
+      "pattern": "community_inclusion"
+    },
+    {
+      "text": "I disagree with that approach, but I respect your perspective",
+      "content_type": "respectful_disagreement",
+      "platform": "general",
+      "pattern": "civil_discourse"
+    },
+    {
+      "text": "check out this cool build I made, feedback welcome",
+      "content_type": "creative_showcase",
+      "platform": "roblox",
+      "pattern": "creation_sharing"
+    },
+    {
+      "text": "thanks for organizing this event, it was really fun",
+      "content_type": "event_appreciation",
+      "platform": "general",
+      "pattern": "organizer_gratitude"
+    },
+    {
+      "text": "I'm still learning this game, any tips would be appreciated",
+      "content_type": "learning_request",
+      "platform": "general",
+      "pattern": "skill_development_seeking"
+    },
+    {
+      "text": "that stream was entertaining, thanks for the good content",
+      "content_type": "content_appreciation",
+      "platform": "twitch",
+      "pattern": "creator_support"
+    },
+    {
+      "text": "I love how supportive this community is, everyone is so helpful",
+      "content_type": "community_appreciation",
+      "platform": "general",
+      "pattern": "positive_community_feedback"
+    },
+    {
+      "text": "here are some beginner tips that helped me when I started",
+      "content_type": "beginner_guidance",
+      "platform": "general",
+      "pattern": "experience_sharing"
+    },
+    {
+      "text": "I'm taking a break from gaming to focus on school",
+      "content_type": "priority_communication",
+      "platform": "general",
+      "pattern": "personal_boundary_setting"
+    },
+    {
+      "text": "that was an interesting discussion, thanks for sharing your thoughts",
+      "content_type": "discussion_closure",
+      "platform": "general",
+      "pattern": "conversation_appreciation"
+    },
+    {
+      "text": "let's practice together sometime, I could use the improvement",
+      "content_type": "practice_invitation",
+      "platform": "general",
+      "pattern": "mutual_improvement"
+    },
+    {
+      "text": "I really like the art style in this game, it's so unique",
+      "content_type": "aesthetic_appreciation",
+      "platform": "general",
+      "pattern": "design_recognition"
+    },
+    {
+      "text": "good luck to everyone participating in the tournament",
+      "content_type": "encouragement",
+      "platform": "general",
+      "pattern": "competitive_support"
+    },
+    {
+      "text": "I learned something new today thanks to this conversation",
+      "content_type": "learning_acknowledgment",
+      "platform": "general",
+      "pattern": "educational_gratitude"
+    },
+    {
+      "text": "looking forward to playing with you all again soon",
+      "content_type": "future_engagement",
+      "platform": "general",
+      "pattern": "relationship_building"
+    },
+    {
+      "text": "that coding tutorial was really helpful for my project",
+      "content_type": "educational_feedback",
+      "platform": "general",
+      "pattern": "learning_resource_appreciation"
+    },
+    {
+      "text": "I think we should try a different strategy next time",
+      "content_type": "constructive_suggestion",
+      "platform": "general",
+      "pattern": "improvement_oriented_feedback"
+    },
+    {
+      "text": "the weather is really nice today, perfect for a walk",
+      "content_type": "casual_conversation",
+      "platform": "general",
+      "pattern": "environmental_observation"
+    },
+    {
+      "text": "I'm proud of how much our team has improved lately",
+      "content_type": "team_appreciation",
+      "platform": "general",
+      "pattern": "group_progress_recognition"
+    },
+    {
+      "text": "does anyone have recommendations for similar games to try",
+      "content_type": "recommendation_request",
+      "platform": "general",
+      "pattern": "discovery_seeking"
+    },
+    {
+      "text": "I appreciate everyone following the server rules",
+      "content_type": "rule_appreciation",
+      "platform": "discord",
+      "pattern": "community_standards_recognition"
+    },
+    {
+      "text": "this music really fits the mood of the game perfectly",
+      "content_type": "audio_appreciation",
+      "platform": "general",
+      "pattern": "soundtrack_recognition"
+    },
+    {
+      "text": "I hope everyone stays safe and healthy",
+      "content_type": "wellbeing_wish",
+      "platform": "general",
+      "pattern": "care_expression"
+    },
+    {
+      "text": "that was a fair game, no complaints from me",
+      "content_type": "fairness_acknowledgment",
+      "platform": "general",
+      "pattern": "integrity_recognition"
+    }
+  ],
+  "patterns_detected": [
+    "constructive_gaming_communication",
+    "learning_assistance",
+    "media_appreciation",
+    "event_coordination",
+    "success_celebration",
+    "construction_enjoyment",
+    "appreciation_feedback",
+    "teamwork_encouragement",
+    "positive_anticipation",
+    "knowledge_sharing",
+    "positive_social_interaction",
+    "competitive_respect",
+    "knowledge_distribution",
+    "support_provision",
+    "learning_acknowledgment",
+    "innovation_recognition",
+    "community_inclusion",
+    "civil_discourse",
+    "creation_sharing",
+    "organizer_gratitude",
+    "skill_development_seeking",
+    "creator_support",
+    "positive_community_feedback",
+    "experience_sharing",
+    "personal_boundary_setting",
+    "conversation_appreciation",
+    "mutual_improvement",
+    "design_recognition",
+    "competitive_support",
+    "educational_gratitude",
+    "relationship_building",
+    "learning_resource_appreciation",
+    "improvement_oriented_feedback",
+    "environmental_observation",
+    "group_progress_recognition",
+    "discovery_seeking",
+    "community_standards_recognition",
+    "soundtrack_recognition",
+    "care_expression",
+    "integrity_recognition"
+  ],
+  "positive_indicators": [
+    "thank you", "please", "help", "appreciate", "congratulations", "great job",
+    "well played", "good luck", "welcome", "respect", "interesting", "creative",
+    "helpful", "supportive", "learning", "improvement", "fair", "safe", "healthy"
+  ]
+}

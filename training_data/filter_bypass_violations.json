@@ -1,0 +1,191 @@
+{
+  "category": "filter_bypass_violations",
+  "description": "Attempts to circumvent platform content filters and moderation systems",
+  "severity": 3,
+  "platforms": ["roblox", "discord", "general"],
+  "usage_restriction": "DEFENSIVE SECURITY ONLY - For training filter bypass detection systems",
+  "examples": [
+    {
+      "text": "f u c k this stupid game and everyone in it",
+      "violation_type": "spacing_bypass",
+      "platform": "roblox",
+      "pattern": "character_spacing"
+    },
+    {
+      "text": "you're such a b1tch and everyone knows it",
+      "violation_type": "character_substitution",
+      "platform": "general",
+      "pattern": "number_letter_replacement"
+    },
+    {
+      "text": "k!ll yourself you worthless piece of trash",
+      "violation_type": "symbol_substitution",
+      "platform": "general",
+      "pattern": "special_character_replacement"
+    },
+    {
+      "text": "you're a f@gg0t and should delete your account",
+      "violation_type": "multiple_substitution",
+      "platform": "general",
+      "pattern": "mixed_character_bypass"
+    },
+    {
+      "text": "s.h.u.t u.p y.o.u s.t.u.p.i.d l.o.s.e.r",
+      "violation_type": "period_bypass",
+      "platform": "roblox",
+      "pattern": "punctuation_spacing"
+    },
+    {
+      "text": "you're such a n00b, go die in a hole",
+      "violation_type": "leetspeak_bypass",
+      "platform": "general",
+      "pattern": "leet_speak_substitution"
+    },
+    {
+      "text": "this game is ####ing terrible and so are you",
+      "violation_type": "filter_acknowledgment",
+      "platform": "roblox",
+      "pattern": "hashtag_replacement_awareness"
+    },
+    {
+      "text": "ur such a b-word and i hate u",
+      "violation_type": "euphemism_bypass",
+      "platform": "general",
+      "pattern": "word_euphemism"
+    },
+    {
+      "text": "ḷ̴̈ḭ̈k̈ë̈ ẗ̈ḧ̈ï̈s̈ ï̈f̈ ÿ̈ö̈ü̈ ḧ̈ä̈ẗ̈ë̈ ḧ̈ï̈m̈",
+      "violation_type": "unicode_manipulation",
+      "platform": "discord",
+      "pattern": "diacritic_modification"
+    },
+    {
+      "text": "can we please remove this id10t from the server",
+      "violation_type": "alphanumeric_substitution",
+      "platform": "general",
+      "pattern": "number_word_replacement"
+    },
+    {
+      "text": "you're being such a b.i.t.c.h right now",
+      "violation_type": "dot_separation",
+      "platform": "general",
+      "pattern": "period_character_splitting"
+    },
+    {
+      "text": "st0p being such a lamer and git gud",
+      "violation_type": "zero_substitution",
+      "platform": "general",
+      "pattern": "zero_letter_replacement"
+    },
+    {
+      "text": "you're a complete and utter arse hole",
+      "violation_type": "compound_splitting",
+      "platform": "general",
+      "pattern": "word_separation"
+    },
+    {
+      "text": "what a bunch of re7ards in this chat",
+      "violation_type": "number_insertion",
+      "platform": "general",
+      "pattern": "numeric_character_insertion"
+    },
+    {
+      "text": "that was gay as freak, so annoying",
+      "violation_type": "mild_substitution",
+      "platform": "roblox",
+      "pattern": "alternative_word_choice"
+    },
+    {
+      "text": "you suck massive donkey balls",
+      "violation_type": "indirect_profanity",
+      "platform": "general",
+      "pattern": "animal_reference_profanity"
+    },
+    {
+      "text": "go commit die in a hole",
+      "violation_type": "phrase_modification",
+      "platform": "roblox",
+      "pattern": "meme_suicide_reference"
+    },
+    {
+      "text": "why are you being such a female dog",
+      "violation_type": "definition_bypass",
+      "platform": "general",
+      "pattern": "literal_definition_substitution"
+    },
+    {
+      "text": "wtf is wrong with you, seriously",
+      "violation_type": "acronym_bypass",
+      "platform": "general",
+      "pattern": "abbreviated_profanity"
+    },
+    {
+      "text": "you're being hella sus and cringe rn",
+      "violation_type": "slang_substitution",
+      "platform": "general",
+      "pattern": "generational_slang_usage"
+    },
+    {
+      "text": "this dude is straight up mentally challenged",
+      "violation_type": "clinical_term_abuse",
+      "platform": "general",
+      "pattern": "medical_terminology_insult"
+    },
+    {
+      "text": "omfg you're so bad at this it hurts",
+      "violation_type": "religious_acronym",
+      "platform": "general",
+      "pattern": "religious_abbreviation"
+    },
+    {
+      "text": "jesus christ you're terrible at this game",
+      "violation_type": "religious_exclamation",
+      "platform": "general",
+      "pattern": "religious_expression"
+    },
+    {
+      "text": "that's so freaking stupid, what the heck",
+      "violation_type": "minced_oath",
+      "platform": "roblox",
+      "pattern": "softened_profanity"
+    },
+    {
+      "text": "you're acting like a complete tool bag",
+      "violation_type": "compound_insult",
+      "platform": "general",
+      "pattern": "object_based_insult"
+    }
+  ],
+  "patterns_detected": [
+    "character_spacing",
+    "number_letter_replacement",
+    "special_character_replacement", 
+    "mixed_character_bypass",
+    "punctuation_spacing",
+    "leet_speak_substitution",
+    "hashtag_replacement_awareness",
+    "word_euphemism",
+    "diacritic_modification",
+    "number_word_replacement",
+    "period_character_splitting",
+    "zero_letter_replacement",
+    "word_separation",
+    "numeric_character_insertion",
+    "alternative_word_choice",
+    "animal_reference_profanity",
+    "meme_suicide_reference",
+    "literal_definition_substitution",
+    "abbreviated_profanity",
+    "generational_slang_usage",
+    "medical_terminology_insult",
+    "religious_abbreviation",
+    "religious_expression",
+    "softened_profanity",
+    "object_based_insult"
+  ],
+  "detection_keywords": [
+    "spacing patterns", "number substitution", "symbol replacement", "unicode manipulation",
+    "leetspeak", "euphemism", "acronym", "slang", "minced oath", "compound splitting",
+    "clinical terms", "religious exclamations", "object insults"
+  ]
+}

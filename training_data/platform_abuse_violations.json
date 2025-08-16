@@ -1,0 +1,193 @@
+{
+  "category": "platform_abuse_violations",
+  "description": "Examples of spam, scams, and platform manipulation tactics",
+  "severity": 3,
+  "platforms": ["discord", "twitter", "instagram", "general"],
+  "usage_restriction": "DEFENSIVE SECURITY ONLY - For training platform abuse detection systems",
+  "examples": [
+    {
+      "text": "🎉 CONGRATULATIONS! You've won $10,000! Click this link NOW to claim your prize!",
+      "violation_type": "fake_giveaway_scam",
+      "platform": "general",
+      "pattern": "urgency_exploitation"
+    },
+    {
+      "text": "URGENT: Your account will be deleted in 24 hours! Verify here immediately or lose everything!",
+      "violation_type": "account_verification_scam",
+      "platform": "general",
+      "pattern": "fear_based_manipulation"
+    },
+    {
+      "text": "FREE NITRO! First 100 people to click get Discord Nitro! Not a scam!",
+      "violation_type": "discord_nitro_scam",
+      "platform": "discord",
+      "pattern": "false_benefit_promise"
+    },
+    {
+      "text": "I'm a Nigerian prince who needs help transferring $50 million. I'll share 20% with you.",
+      "violation_type": "advance_fee_fraud",
+      "platform": "general",
+      "pattern": "classic_scam_narrative"
+    },
+    {
+      "text": "Invest in this new cryptocurrency! Guaranteed 1000% returns in 30 days! Limited time only!",
+      "violation_type": "cryptocurrency_scam",
+      "platform": "twitter",
+      "pattern": "investment_fraud"
+    },
+    {
+      "text": "Your computer has a virus! Call this number immediately for technical support!",
+      "violation_type": "tech_support_scam",
+      "platform": "general",
+      "pattern": "technical_fear_manipulation"
+    },
+    {
+      "text": "Single moms in your area want to meet! Click here for instant hookups!",
+      "violation_type": "dating_spam",
+      "platform": "general",
+      "pattern": "sexual_clickbait"
+    },
+    {
+      "text": "Make $5000 working from home! No experience needed! Start today!",
+      "violation_type": "work_from_home_scam",
+      "platform": "general",
+      "pattern": "easy_money_promise"
+    },
+    {
+      "text": "Your package delivery failed. Update your address and pay $3 fee to redeliver.",
+      "violation_type": "delivery_scam",
+      "platform": "general",
+      "pattern": "service_impersonation"
+    },
+    {
+      "text": "⚠️ SECURITY ALERT: Unusual activity detected. Confirm your password now!",
+      "violation_type": "security_alert_phishing",
+      "platform": "general",
+      "pattern": "security_impersonation"
+    },
+    {
+      "text": "Buy our weight loss pills! Lose 50 pounds in 10 days! Doctors hate this trick!",
+      "violation_type": "health_fraud",
+      "platform": "general",
+      "pattern": "medical_misinformation_sales"
+    },
+    {
+      "text": "🔥 HOT STOCK TIP! This penny stock will make you rich! Buy before it explodes!",
+      "violation_type": "stock_pump_scheme",
+      "platform": "twitter",
+      "pattern": "financial_manipulation"
+    },
+    {
+      "text": "BREAKING: Celebrity leaked photos! Must see! Download now before removed!",
+      "violation_type": "malware_clickbait",
+      "platform": "general",
+      "pattern": "celebrity_exploitation"
+    },
+    {
+      "text": "Government is giving away free money! $2000 stimulus check waiting for you!",
+      "violation_type": "government_impersonation_scam",
+      "platform": "general",
+      "pattern": "authority_impersonation"
+    },
+    {
+      "text": "Your bank account has been compromised! Enter your login details to secure it!",
+      "violation_type": "banking_phishing",
+      "platform": "general",
+      "pattern": "financial_credential_theft"
+    },
+    {
+      "text": "WIN A FREE iPHONE! Be the 1000th visitor today! Enter your credit card for shipping!",
+      "violation_type": "fake_contest_scam",
+      "platform": "general",
+      "pattern": "fake_winner_manipulation"
+    },
+    {
+      "text": "Your subscription expires today! Update payment info or lose access forever!",
+      "violation_type": "subscription_scam",
+      "platform": "general",
+      "pattern": "service_expiration_fear"
+    },
+    {
+      "text": "MIRACLE CURE! This one weird trick cures all diseases! Big pharma doesn't want you to know!",
+      "violation_type": "medical_miracle_scam",
+      "platform": "general",
+      "pattern": "health_conspiracy_exploitation"
+    },
+    {
+      "text": "IRS NOTICE: You owe back taxes. Pay immediately or face arrest. Call now!",
+      "violation_type": "tax_scam",
+      "platform": "general",
+      "pattern": "government_threat_manipulation"
+    },
+    {
+      "text": "Lonely? Find love instantly! Beautiful women want to chat with you right now!",
+      "violation_type": "romance_scam_bait",
+      "platform": "general",
+      "pattern": "loneliness_exploitation"
+    },
+    {
+      "text": "Your computer is infected with 47 viruses! Download our antivirus now or lose everything!",
+      "violation_type": "fake_antivirus_scam",
+      "platform": "general",
+      "pattern": "security_software_fraud"
+    },
+    {
+      "text": "You've inherited $2.5 million from a distant relative! Contact us to claim inheritance!",
+      "violation_type": "inheritance_fraud",
+      "platform": "general",
+      "pattern": "unexpected_windfall_scam"
+    },
+    {
+      "text": "Special offer! Buy 100 followers for $5! Become Instagram famous overnight!",
+      "violation_type": "social_media_manipulation",
+      "platform": "instagram",
+      "pattern": "fake_engagement_services"
+    },
+    {
+      "text": "Your Netflix account has been suspended! Click here and enter payment details to reactivate!",
+      "violation_type": "streaming_service_phishing",
+      "platform": "general",
+      "pattern": "entertainment_service_impersonation"
+    },
+    {
+      "text": "FLASH SALE! Designer bags 90% off! Only 2 hours left! Limited quantities!",
+      "violation_type": "counterfeit_goods_scam",
+      "platform": "general",
+      "pattern": "luxury_goods_fraud"
+    }
+  ],
+  "patterns_detected": [
+    "urgency_exploitation",
+    "fear_based_manipulation",
+    "false_benefit_promise",
+    "classic_scam_narrative",
+    "investment_fraud",
+    "technical_fear_manipulation",
+    "sexual_clickbait",
+    "easy_money_promise",
+    "service_impersonation",
+    "security_impersonation",
+    "medical_misinformation_sales",
+    "financial_manipulation",
+    "celebrity_exploitation",
+    "authority_impersonation",
+    "financial_credential_theft",
+    "fake_winner_manipulation",
+    "service_expiration_fear",
+    "health_conspiracy_exploitation",
+    "government_threat_manipulation",
+    "loneliness_exploitation",
+    "security_software_fraud",
+    "unexpected_windfall_scam",
+    "fake_engagement_services",
+    "entertainment_service_impersonation",
+    "luxury_goods_fraud"
+  ],
+  "detection_keywords": [
+    "congratulations", "urgent", "free", "guaranteed", "limited time", "click now",
+    "won", "winner", "verify", "security alert", "virus", "infected", "suspicious activity",
+    "inheritance", "prince", "cryptocurrency", "investment", "returns", "profit",
+    "work from home", "easy money", "miracle", "cure", "doctors hate", "banned",
+    "government", "IRS", "taxes", "arrest", "suspended", "expired"
+  ]
+}

@@ -1,0 +1,156 @@
+{
+  "category": "child_safety_violations",
+  "description": "Examples of content that endangers or inappropriately targets minors",
+  "severity": 5,
+  "platforms": ["roblox", "discord", "general"],
+  "usage_restriction": "DEFENSIVE SECURITY ONLY - For training child safety detection systems",
+  "examples": [
+    {
+      "text": "hey kid what's your real name and where do you live",
+      "violation_type": "personal_info_solicitation",
+      "platform": "general",
+      "pattern": "direct_personal_questions"
+    },
+    {
+      "text": "are your parents home right now? we should talk privately",
+      "violation_type": "isolation_attempt",
+      "platform": "general", 
+      "pattern": "supervision_inquiry"
+    },
+    {
+      "text": "you seem mature for your age, want to be friends on a different app",
+      "violation_type": "platform_migration",
+      "platform": "general",
+      "pattern": "grooming_escalation"
+    },
+    {
+      "text": "don't tell anyone about our conversations, it's our special secret",
+      "violation_type": "secrecy_enforcement",
+      "platform": "general",
+      "pattern": "isolation_tactics"
+    },
+    {
+      "text": "what school do you go to? I could pick you up sometime",
+      "violation_type": "location_solicitation",
+      "platform": "general",
+      "pattern": "meeting_arrangement"
+    },
+    {
+      "text": "you're so much cooler than other kids your age, here's my number",
+      "violation_type": "contact_exchange",
+      "platform": "general",
+      "pattern": "flattery_grooming"
+    },
+    {
+      "text": "send me a photo so I know who I'm talking to",
+      "violation_type": "image_solicitation",
+      "platform": "general",
+      "pattern": "visual_material_request"
+    },
+    {
+      "text": "age is just a number, right? you understand things others don't",
+      "violation_type": "age_normalization",
+      "platform": "general",
+      "pattern": "boundary_erosion"
+    },
+    {
+      "text": "let's roleplay as boyfriend and girlfriend, it'll be fun",
+      "violation_type": "inappropriate_roleplay",
+      "platform": "roblox",
+      "pattern": "sexual_grooming"
+    },
+    {
+      "text": "I have robux to give you if you do what I ask",
+      "violation_type": "virtual_currency_bribery",
+      "platform": "roblox",
+      "pattern": "incentive_manipulation"
+    },
+    {
+      "text": "join my private server, no adults allowed there",
+      "violation_type": "unsupervised_environment",
+      "platform": "roblox",
+      "pattern": "adult_exclusion"
+    },
+    {
+      "text": "you're way more mature than other 12 year olds, we should chat on discord",
+      "violation_type": "maturity_flattery",
+      "platform": "general",
+      "pattern": "platform_transition"
+    },
+    {
+      "text": "what's your address? I want to send you a gift",
+      "violation_type": "address_solicitation",
+      "platform": "general",
+      "pattern": "gift_pretext"
+    },
+    {
+      "text": "your parents wouldn't understand our friendship, let's keep it between us",
+      "violation_type": "parent_alienation",
+      "platform": "general",
+      "pattern": "authority_undermining"
+    },
+    {
+      "text": "you can trust me, I'm not like other adults",
+      "violation_type": "trust_building",
+      "platform": "general",
+      "pattern": "authority_distinction"
+    },
+    {
+      "text": "send me your phone number and we can text instead",
+      "violation_type": "communication_escalation",
+      "platform": "general",
+      "pattern": "contact_transition"
+    },
+    {
+      "text": "do you have a webcam? let's video chat privately",
+      "violation_type": "video_solicitation",
+      "platform": "discord",
+      "pattern": "visual_escalation"
+    },
+    {
+      "text": "what time do you get home from school? when are you usually alone?",
+      "violation_type": "schedule_mapping",
+      "platform": "general",
+      "pattern": "vulnerability_timing"
+    },
+    {
+      "text": "you're so special, not like other kids. this is just between us",
+      "violation_type": "specialness_grooming",
+      "platform": "general",
+      "pattern": "uniqueness_exploitation"
+    },
+    {
+      "text": "I could be your sugar daddy, just keep it secret from your family",
+      "violation_type": "financial_grooming",
+      "platform": "general",
+      "pattern": "economic_manipulation"
+    }
+  ],
+  "patterns_detected": [
+    "direct_personal_questions",
+    "supervision_inquiry",
+    "grooming_escalation", 
+    "isolation_tactics",
+    "meeting_arrangement",
+    "flattery_grooming",
+    "visual_material_request",
+    "boundary_erosion",
+    "sexual_grooming",
+    "incentive_manipulation",
+    "adult_exclusion",
+    "platform_transition",
+    "gift_pretext",
+    "authority_undermining",
+    "authority_distinction",
+    "contact_transition",
+    "visual_escalation",
+    "vulnerability_timing",
+    "uniqueness_exploitation",
+    "economic_manipulation"
+  ],
+  "detection_keywords": [
+    "age", "young", "kid", "child", "school", "parent", "secret", "private", 
+    "special", "mature", "address", "phone", "real name", "webcam", "alone",
+    "trust me", "between us", "don't tell", "pick you up", "send photo"
+  ]
+}

@@ -26,11 +26,15 @@ import torch
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import semantic_search
 
-from sentinel.score_formulae import calculate_contrastive_score, skewness
+from sentinel.score_formulae import (
+    calculate_contrastive_score, skewness, entropy_weighted_skewness,
+    robust_skewness_with_confidence, adaptive_threshold_score,
+    ensemble_scoring, pattern_consistency_score
+)
 from sentinel.io.saved_index_config import SavedIndexConfig
 from sentinel.io.index_io import save_index, load_index, create_s3_transport_params
 from sentinel.embeddings.sbert import get_sentence_transformer_and_scaling_fn
-from sentinel.score_types import RareClassAffinityResult
+from sentinel.score_types import RareClassAffinityResult, EnhancedRareClassAffinityResult
 
 LOG = logging.getLogger(__name__)
 
@@ -422,3 +426,97 @@ class SentinelLocalIndex:
             rare_class_affinity_score=rare_class_score,
             observation_scores=observation_scores,
         )
+
+    def calculate_enhanced_rare_class_affinity(
+        self,
+        text_samples: List[str],
+        top_k: int = 5,
+        similarity_formula: Callable[
+            [List[float], List[float]], float
+        ] = calculate_contrastive_score,
+        min_score_to_consider: float = 0.1,
+        prevent_exact_match: bool = False,
+        encoding_additional_kwargs: Mapping[str, Any] = {},
+        show_progress_bar: bool = False,
+        historical_scores: Optional[np.array] = None,
+        enable_ensemble_scoring: bool = True,
+        enable_pattern_consistency: bool = True,
+        confidence_level: float = 0.95,
+    ) -> EnhancedRareClassAffinityResult:
+        """Calculate enhanced rare class affinity with advanced scoring algorithms.
+
+        This method provides comprehensive threat assessment using multiple advanced scoring
+        techniques including entropy analysis, confidence intervals, ensemble methods,
+        and temporal pattern consistency analysis.
+
+        Args:
+            text_samples: List of text strings to evaluate for rare class affinity.
+            top_k: Number of closest neighbors to consider when calculating the score.
+            similarity_formula: Function to calculate individual similarity scores.
+            min_score_to_consider: Threshold below which scores are set to 0.
+            prevent_exact_match: Whether to skip exact matches when scoring.
+            encoding_additional_kwargs: Additional keyword arguments for encoding.
+            show_progress_bar: Whether to display a progress bar during encoding.
+            historical_scores: Historical score data for adaptive thresholding.
+            enable_ensemble_scoring: Whether to calculate ensemble scores.
+            enable_pattern_consistency: Whether to analyze temporal pattern consistency.
+            confidence_level: Confidence level for interval calculations.
+
+        Returns:
+            EnhancedRareClassAffinityResult with comprehensive scoring metrics.
+        """
+        # Get basic affinity result first
+        basic_result = self.calculate_rare_class_affinity(
+            text_samples=text_samples,
+            top_k=top_k,
+            similarity_formula=similarity_formula,
+            aggregation_function=skewness,  # Use standard skewness for baseline
+            min_score_to_consider=min_score_to_consider,
+            prevent_exact_match=prevent_exact_match,
+            encoding_additional_kwargs=encoding_additional_kwargs,
+            show_progress_bar=show_progress_bar,
+        )
+
+        scores_array = np.array(list(basic_result.observation_scores.values()))
+
+        # Calculate enhanced metrics
+        enhanced_result = EnhancedRareClassAffinityResult(
+            rare_class_affinity_score=basic_result.rare_class_affinity_score,
+            observation_scores=basic_result.observation_scores,
+        )
+
+        # Entropy-weighted scoring
+        if len(scores_array) >= 10:
+            enhanced_result.entropy_weighted_score = entropy_weighted_skewness(scores_array)
+
+        # Confidence intervals
+        if len(scores_array) >= 10:
+            skew_score, lower_bound, upper_bound = robust_skewness_with_confidence(
+                scores_array, confidence_level=confidence_level
+            )
+            enhanced_result.confidence_interval = (lower_bound, upper_bound)
+
+        # Ensemble scoring
+        if enable_ensemble_scoring and len(scores_array) >= 10:
+            enhanced_result.ensemble_score = ensemble_scoring(scores_array)
+
+        # Pattern consistency analysis
+        if enable_pattern_consistency and len(scores_array) >= 10:
+            enhanced_result.pattern_consistency_score = pattern_consistency_score(scores_array)
+
+        # Adaptive thresholding
+        if historical_scores is not None:
+            enhanced_result.adaptive_threshold = adaptive_threshold_score(
+                scores_array, historical_scores, min_score_to_consider
+            )
+
+        # Score metadata
+        enhanced_result.score_metadata = {
+            "num_observations": len(scores_array),
+            "positive_observations": len(scores_array[scores_array > 0]),
+            "max_individual_score": np.max(scores_array) if len(scores_array) > 0 else 0.0,
+            "mean_score": np.mean(scores_array) if len(scores_array) > 0 else 0.0,
+            "score_variance": np.var(scores_array) if len(scores_array) > 0 else 0.0,
+        }
+
+        return enhanced_result
