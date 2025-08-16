@@ -1,0 +1,191 @@
+{
+  "category": "harassment_violations",
+  "description": "Examples of harassment, cyberbullying, and targeted abuse",
+  "severity": 4,
+  "platforms": ["discord", "twitter", "reddit", "general"],
+  "usage_restriction": "DEFENSIVE SECURITY ONLY - For training harassment detection systems",
+  "examples": [
+    {
+      "text": "kill yourself nobody wants you here",
+      "violation_type": "suicide_encouragement",
+      "platform": "general",
+      "pattern": "self_harm_incitement"
+    },
+    {
+      "text": "you're worthless trash and everyone knows it",
+      "violation_type": "personal_attack",
+      "platform": "general",
+      "pattern": "dehumanizing_language"
+    },
+    {
+      "text": "I'm going to make your life hell until you quit",
+      "violation_type": "persistent_harassment",
+      "platform": "general",
+      "pattern": "continued_threat"
+    },
+    {
+      "text": "everyone spam this loser's DMs until they block us all",
+      "violation_type": "coordinated_harassment",
+      "platform": "discord",
+      "pattern": "mass_harassment_coordination"
+    },
+    {
+      "text": "you don't belong here, go back where you came from",
+      "violation_type": "exclusionary_harassment",
+      "platform": "general",
+      "pattern": "belonging_denial"
+    },
+    {
+      "text": "your voice is annoying, shut up and never speak again",
+      "violation_type": "silencing_harassment",
+      "platform": "discord",
+      "pattern": "voice_targeting"
+    },
+    {
+      "text": "I found your social media, time to ruin your reputation",
+      "violation_type": "doxxing_threat",
+      "platform": "general",
+      "pattern": "privacy_violation_threat"
+    },
+    {
+      "text": "fat ugly freak, no wonder nobody likes you",
+      "violation_type": "appearance_harassment",
+      "platform": "general",
+      "pattern": "physical_appearance_attack"
+    },
+    {
+      "text": "you're a pathetic excuse for a human being",
+      "violation_type": "existential_attack",
+      "platform": "general",
+      "pattern": "humanity_denial"
+    },
+    {
+      "text": "I hope you get cancer and die slowly",
+      "violation_type": "death_wish",
+      "platform": "general",
+      "pattern": "disease_wishing"
+    },
+    {
+      "text": "everyone report this user for existing, they're trash",
+      "violation_type": "false_reporting",
+      "platform": "general",
+      "pattern": "system_abuse_coordination"
+    },
+    {
+      "text": "you should have been aborted, waste of oxygen",
+      "violation_type": "existence_denial",
+      "platform": "general",
+      "pattern": "birth_attack"
+    },
+    {
+      "text": "your family must be ashamed of what a failure you are",
+      "violation_type": "family_attack",
+      "platform": "general",
+      "pattern": "relationship_targeting"
+    },
+    {
+      "text": "I'm going to find you and make you regret this",
+      "violation_type": "physical_threat",
+      "platform": "general",
+      "pattern": "real_world_threat"
+    },
+    {
+      "text": "you're so stupid it hurts to read your messages",
+      "violation_type": "intelligence_attack",
+      "platform": "general",
+      "pattern": "cognitive_harassment"
+    },
+    {
+      "text": "nobody cares about your opinion, just delete your account",
+      "violation_type": "opinion_silencing",
+      "platform": "twitter",
+      "pattern": "platform_departure_demand"
+    },
+    {
+      "text": "look at this loser everyone, let's all laugh at them",
+      "violation_type": "public_humiliation",
+      "platform": "general",
+      "pattern": "mob_humiliation"
+    },
+    {
+      "text": "you're mentally ill and need to be locked up",
+      "violation_type": "mental_health_attack",
+      "platform": "general",
+      "pattern": "psychological_stigmatization"
+    },
+    {
+      "text": "I'm going to stalk your every post and comment to harass you",
+      "violation_type": "stalking_threat",
+      "platform": "reddit",
+      "pattern": "persistent_following_threat"
+    },
+    {
+      "text": "your content is garbage and you should feel ashamed",
+      "violation_type": "creative_harassment",
+      "platform": "general",
+      "pattern": "work_degradation"
+    },
+    {
+      "text": "everyone block and ignore this attention-seeking waste",
+      "violation_type": "isolation_campaign",
+      "platform": "general",
+      "pattern": "social_exclusion_coordination"
+    },
+    {
+      "text": "you're so cringe it's physically painful to watch",
+      "violation_type": "social_attack",
+      "platform": "general",
+      "pattern": "social_awkwardness_shaming"
+    },
+    {
+      "text": "I wish your parents could see what a disappointment you turned out to be",
+      "violation_type": "parental_shame",
+      "platform": "general",
+      "pattern": "family_disappointment"
+    },
+    {
+      "text": "you deserve all the bad things that happen to you",
+      "violation_type": "victim_blaming",
+      "platform": "general",
+      "pattern": "suffering_justification"
+    },
+    {
+      "text": "the world would be better without people like you in it",
+      "violation_type": "eliminationist_language",
+      "platform": "general",
+      "pattern": "world_improvement_through_removal"
+    }
+  ],
+  "patterns_detected": [
+    "self_harm_incitement",
+    "dehumanizing_language",
+    "continued_threat",
+    "mass_harassment_coordination",
+    "belonging_denial",
+    "voice_targeting",
+    "privacy_violation_threat",
+    "physical_appearance_attack",
+    "humanity_denial",
+    "disease_wishing",
+    "system_abuse_coordination",
+    "birth_attack",
+    "relationship_targeting",
+    "real_world_threat",
+    "cognitive_harassment",
+    "platform_departure_demand",
+    "mob_humiliation",
+    "psychological_stigmatization",
+    "persistent_following_threat",
+    "work_degradation",
+    "social_exclusion_coordination",
+    "social_awkwardness_shaming",
+    "family_disappointment",
+    "suffering_justification",
+    "world_improvement_through_removal"
+  ],
+  "detection_keywords": [
+    "kill yourself", "worthless", "trash", "pathetic", "loser", "die", "cancer",
+    "abort", "failure", "stupid", "ugly", "freak", "cringe", "waste", "garbage",
+    "mentally ill", "disappointment", "deserve", "ruin", "stalk", "spam"
+  ]
+}

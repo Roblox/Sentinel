@@ -1,15 +1,46 @@
-# Sentinel
+# Sentinel - Enhanced Multi-Platform Safety Detection
 
+## ⚠️ IMPORTANT: DEFENSIVE SECURITY USE ONLY ⚠️
+
+**This system is authorized EXCLUSIVELY for defensive security purposes:**
+- ✅ Content safety and moderation systems
+- ✅ Academic research on harmful content detection  
+- ✅ Educational and training purposes
+- ✅ Vulnerability assessment and security testing
+
+**PROHIBITED USES:**
+- ❌ Generating or amplifying harmful content
+- ❌ Training offensive language models
+- ❌ Creating attack tools or capabilities
+- ❌ Surveillance without consent
 
 ## Overview
 
-Roblox Sentinel, part of the Roblox Safety Toolkit, is a Python library designed specifically for realtime detection of extremely rare classes of text by using contrastive learning principles. While traditional classifiers struggle with highly imbalanced datasets, Sentinel excels by:
+Sentinel is a comprehensive multi-platform safety detection system designed for real-time identification of harmful content across different platforms and violation types. The enhanced version provides:
 
-1. Collecting recent observations from a single source (e.g., recent messages from a user)
-2. Calculating individual observation scores using embedding similarity
-3. Aggregating these scores using statistical measures like skewness to detect patterns
+### 🎯 **Multi-Category Detection**
+- **Child Safety**: Grooming, exploitation, inappropriate contact
+- **Harassment**: Cyberbullying, targeted abuse, doxxing threats
+- **Hate Speech**: Discrimination, extremism, dehumanizing language
+- **Gaming Toxicity**: Griefing, competitive harassment, toxic behavior
+- **Platform Abuse**: Spam, scams, filter bypass attempts
+- **Content Violations**: General harmful content patterns
 
-By prioritizing recall over precision, Sentinel serves as a high-recall candidate generator for more thorough investigation. This approach is particularly effective for applications where rare patterns are critical to identify. Rather than treating each message in isolation, Sentinel analyzes patterns across messages to identify concerning behavior.
+### 🏢 **Platform-Specific Configurations**
+- **Roblox**: Child-focused with strict safety thresholds
+- **Discord**: Server-based with coordination abuse detection
+- **Twitter/X**: Public discourse with hate speech focus
+- **Reddit**: Forum-style with brigading detection
+- **General**: Configurable for any platform
+
+### 🛡️ **Advanced Safety Features**
+- Comprehensive usage monitoring and audit trails
+- Rate limiting and access control
+- Automated threat assessment and alerting
+- Compliance reporting and policy enforcement
+- Validation framework for accuracy testing
+
+Rather than treating each message in isolation, Sentinel analyzes patterns across multiple observations to identify concerning behavior trends, making it ideal for detecting sophisticated threats that evolve over time.
 
 ## Terminology
 
@@ -32,27 +63,63 @@ pip install '.[sbert]'
 
 ## Quick Start
 
+### Enhanced Multi-Category Detection
+
+```python
+from sentinel.multi_category_index import MultiCategorySentinelIndex
+from sentinel.violation_taxonomy import Platform
+from sentinel.safety_guardrails import initialize_global_guardrails, UsageContext
+
+# Initialize safety guardrails (required)
+guardrails = initialize_global_guardrails(enable_strict_mode=True)
+
+# Initialize multi-category detection for a specific platform
+index = MultiCategorySentinelIndex(
+    platform=Platform.ROBLOX,  # or Platform.DISCORD, Platform.TWITTER, etc.
+    model_base_path="./models"
+)
+
+# Auto-load all available trained models
+loaded_models = index.auto_load_indices()
+print(f"Loaded {loaded_models} detection models")
+
+# Analyze content across multiple violation categories
+user_messages = [
+    "Hey, what's your real name and address?",
+    "Want to play a private game just us two?",
+    "Don't tell your parents about our conversations"
+]
+
+# Comprehensive violation detection
+result = index.detect_violations(
+    text_samples=user_messages,
+    enable_keyword_detection=True,
+    enable_pattern_matching=True
+)
+
+# Review results
+print(f"Overall Risk Score: {result.overall_risk_score:.3f}")
+print(f"Highest Risk Category: {result.highest_risk_category}")
+print(f"High Risk Violations: {result.num_high_risk_violations}")
+print(f"Platform: {result.platform.value}")
+
+# Examine specific violation categories
+for violation_type, violation_result in result.violation_results.items():
+    print(f"\n{violation_type.value}:")
+    print(f"  Affinity Score: {violation_result.affinity_score:.3f}")
+    print(f"  Risk Level: {violation_result.risk_level}")
+    print(f"  Confidence: {violation_result.confidence:.3f}")
+    if violation_result.triggered_keywords:
+        print(f"  Keywords: {violation_result.triggered_keywords}")
+```
+
+### Legacy Single-Category Detection
+
 ```python
 from sentinel.sentinel_local_index import SentinelLocalIndex
 
 # Load a previously saved index from a local path
 index = SentinelLocalIndex.load(path="path/to/local/index")
-
-# Or load from S3
-index = SentinelLocalIndex.load(
-    path="s3://my-bucket/path/to/index",
-    aws_access_key_id="YOUR_ACCESS_KEY_ID",  # Optional if using environment credentials
-    aws_secret_access_key="YOUR_SECRET_ACCESS_KEY"  # Optional if using environment credentials
-)
-
-# Collect recent observations from a single source (e.g., recent messages from a user)
-user_recent_messages = [
-    "Hey how are you?",
-    "What are you doing today?",
-    "Do you have any pictures you can share?",
-    "Where do you live?",
-    "Are your parents home right now?"
-]
 
 # Calculate rare class affinity across all observations
 result = index.calculate_rare_class_affinity(user_recent_messages)
@@ -60,11 +127,124 @@ result = index.calculate_rare_class_affinity(user_recent_messages)
 # Get the overall score (uses skewness by default)
 overall_score = result.rare_class_affinity_score
 print(f"Overall rare class affinity score: {overall_score:.4f}")
+```
 
-# Examine individual observation scores
-for message, score in result.observation_scores.items():
-    risk_level = "High" if score > 0.5 else "Medium" if score > 0.1 else "Low"
-    print(f"'{message}' - Score: {score:.4f} - Risk: {risk_level}")
+## 🚀 Enhanced Features
+
+### Comprehensive Training Data Builder
+
+```python
+from sentinel.training_data_builder import TrainingDataBuilder
+from pathlib import Path
+
+# Build detection models for all violation categories
+builder = TrainingDataBuilder(
+    training_data_dir=Path("./training_data"),
+    model_output_dir=Path("./models")
+)
+
+# Validate training data
+validation_results = builder.validate_training_data()
+print(f"Valid training files: {len(validation_results['valid_files'])}")
+
+# Build all models
+results = builder.build_all_models()
+for model_name, success in results.items():
+    print(f"{model_name}: {'✓' if success else '✗'}")
+```
+
+### Validation Framework
+
+```python
+from sentinel.validation_framework import ValidationFramework
+
+# Test model accuracy and performance
+validator = ValidationFramework(
+    test_data_dir=Path("./test_data"),
+    models_dir=Path("./models"),
+    results_dir=Path("./validation_results")
+)
+
+# Validate platform-specific performance
+report = validator.validate_platform(Platform.ROBLOX)
+print(f"Accuracy: {report.metrics.accuracy:.3f}")
+print(f"F1 Score: {report.metrics.f1_score:.3f}")
+print(f"Processing Time: {report.metrics.avg_processing_time:.3f}s")
+```
+
+### Safety Guardrails and Monitoring
+
+```python
+from sentinel.safety_guardrails import SafetyGuardrails, UsageContext
+
+# Initialize comprehensive safety monitoring
+guardrails = SafetyGuardrails(
+    audit_log_dir=Path("./audit_logs"),
+    enable_strict_mode=True
+)
+
+# Check access permissions
+permitted, reason = guardrails.check_access_permission(
+    user_id="researcher_123",
+    usage_context=UsageContext.ACADEMIC_RESEARCH,
+    component="multi_category_detection",
+    request_details={"batch_size": 50, "purpose": "safety research"}
+)
+
+# Export compliance report
+compliance_report = guardrails.export_compliance_report()
+```
+
+### Platform-Specific Configurations
+
+```python
+from sentinel.platform_config import get_recommended_config, create_custom_config
+
+# Get optimized configuration for a platform
+roblox_config = get_recommended_config(Platform.ROBLOX)
+print(f"Child safety threshold: {roblox_config.get_violation_threshold(ViolationType.CHILD_SAFETY, 'high')}")
+
+# Create custom configuration
+custom_config = create_custom_config(
+    base_platform=Platform.DISCORD,
+    custom_name="Gaming Community",
+    thresholds=DetectionThresholds(high_risk_threshold=0.4),
+    enabled_violations={ViolationType.GAME_TOXICITY, ViolationType.HARASSMENT}
+)
+```
+
+## 📊 Setup and Training
+
+### Quick Setup
+
+```bash
+# Run the enhanced setup script
+python setup_enhanced_sentinel.py
+
+# This will create:
+# - Training data directories and samples
+# - Platform-specific configurations  
+# - Safety policy templates
+# - Validation test cases
+```
+
+### Building Detection Models
+
+```python
+# After adding your training data to ./training_data/
+from sentinel.training_data_builder import TrainingDataBuilder
+
+builder = TrainingDataBuilder(
+    training_data_dir=Path("./training_data"),
+    model_output_dir=Path("./models")
+)
+
+# Build models for specific violation types
+builder.build_category_model(ViolationType.CHILD_SAFETY)
+builder.build_category_model(ViolationType.HARASSMENT)
+
+# Or build all available models
+builder.build_all_models()
 ```
 
 ## Creating a New Index

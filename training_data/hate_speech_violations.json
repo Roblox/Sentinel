@@ -1,0 +1,191 @@
+{
+  "category": "hate_speech_violations",
+  "description": "Examples of hate speech and discrimination targeting groups based on protected characteristics",
+  "severity": 4,
+  "platforms": ["twitter", "reddit", "discord", "general"],
+  "usage_restriction": "DEFENSIVE SECURITY ONLY - For training hate speech detection systems",
+  "examples": [
+    {
+      "text": "those people are inferior and don't belong in our country",
+      "violation_type": "racial_superiority",
+      "platform": "general",
+      "pattern": "dehumanizing_rhetoric"
+    },
+    {
+      "text": "we need to purify our nation from these subhuman parasites",
+      "violation_type": "genocidal_language",
+      "platform": "general",
+      "pattern": "eliminationist_rhetoric"
+    },
+    {
+      "text": "all [group] are criminals and should be deported immediately",
+      "violation_type": "group_criminalization",
+      "platform": "twitter",
+      "pattern": "mass_generalization"
+    },
+    {
+      "text": "nature designed different races for different purposes, some are naturally slaves",
+      "violation_type": "biological_determinism",
+      "platform": "general",
+      "pattern": "pseudoscientific_racism"
+    },
+    {
+      "text": "the great replacement is happening, we must fight back against invasion",
+      "violation_type": "conspiracy_hate",
+      "platform": "general",
+      "pattern": "replacement_theory"
+    },
+    {
+      "text": "certain groups have lower IQ and are genetically predisposed to violence",
+      "violation_type": "scientific_racism",
+      "platform": "reddit",
+      "pattern": "genetic_determinism"
+    },
+    {
+      "text": "traditional marriage is under attack by degenerates trying to corrupt our children",
+      "violation_type": "lgbtq_hatred",
+      "platform": "general",
+      "pattern": "moral_panic"
+    },
+    {
+      "text": "these people are a disease that needs to be cured or contained",
+      "violation_type": "medical_dehumanization",
+      "platform": "general",
+      "pattern": "pathologizing_language"
+    },
+    {
+      "text": "every real patriot knows who the real enemy is, they control the media and banks",
+      "violation_type": "antisemitic_conspiracy",
+      "platform": "general",
+      "pattern": "coded_antisemitism"
+    },
+    {
+      "text": "women are naturally inferior at logic and should stick to domestic roles",
+      "violation_type": "gender_discrimination",
+      "platform": "general",
+      "pattern": "biological_sexism"
+    },
+    {
+      "text": "immigrants are bringing crime and disease to poison our communities",
+      "violation_type": "xenophobic_rhetoric",
+      "platform": "general",
+      "pattern": "contamination_metaphor"
+    },
+    {
+      "text": "the holocaust numbers are exaggerated, it's all propaganda for political control",
+      "violation_type": "holocaust_denial",
+      "platform": "general",
+      "pattern": "historical_revisionism"
+    },
+    {
+      "text": "mixed race relationships are unnatural and destroy the purity of bloodlines",
+      "violation_type": "racial_purity",
+      "platform": "general",
+      "pattern": "blood_purity_ideology"
+    },
+    {
+      "text": "religious minorities are infiltrating our society to impose their barbaric laws",
+      "violation_type": "religious_hatred",
+      "platform": "general",
+      "pattern": "cultural_invasion_narrative"
+    },
+    {
+      "text": "disabled people are a burden on society and waste valuable resources",
+      "violation_type": "ableist_hatred",
+      "platform": "general",
+      "pattern": "utilitarian_dehumanization"
+    },
+    {
+      "text": "certain ethnic groups are naturally predisposed to criminal behavior",
+      "violation_type": "ethnic_stereotyping",
+      "platform": "general",
+      "pattern": "behavioral_essentialism"
+    },
+    {
+      "text": "white people are being systematically replaced and genocided",
+      "violation_type": "white_genocide_conspiracy",
+      "platform": "general",
+      "pattern": "victimhood_narrative"
+    },
+    {
+      "text": "transgender ideology is a mental illness being pushed on innocent children",
+      "violation_type": "trans_hatred",
+      "platform": "general",
+      "pattern": "pathologizing_identity"
+    },
+    {
+      "text": "cultural marxists are using diversity to destroy western civilization",
+      "violation_type": "cultural_marxism_conspiracy",
+      "platform": "general",
+      "pattern": "civilization_threat_narrative"
+    },
+    {
+      "text": "some cultures are objectively superior and others should be eliminated",
+      "violation_type": "cultural_supremacy",
+      "platform": "general",
+      "pattern": "civilizational_hierarchy"
+    },
+    {
+      "text": "gypsies are born thieves and con artists, it's in their nature",
+      "violation_type": "romani_hatred",
+      "platform": "general",
+      "pattern": "ethnic_essentialism"
+    },
+    {
+      "text": "feminism is a disease that destroys the natural order between men and women",
+      "violation_type": "antifeminist_hatred",
+      "platform": "general",
+      "pattern": "gender_role_fundamentalism"
+    },
+    {
+      "text": "certain religious groups worship a pedophile and practice barbaric rituals",
+      "violation_type": "religious_defamation",
+      "platform": "general",
+      "pattern": "religious_demonization"
+    },
+    {
+      "text": "interracial couples are committing genocide against the white race",
+      "violation_type": "miscegenation_hatred",
+      "platform": "general",
+      "pattern": "racial_preservation_ideology"
+    },
+    {
+      "text": "multiculturalism is code for anti-white discrimination and replacement",
+      "violation_type": "anti_multiculturalism",
+      "platform": "general",
+      "pattern": "coded_white_nationalism"
+    }
+  ],
+  "patterns_detected": [
+    "dehumanizing_rhetoric",
+    "eliminationist_rhetoric",
+    "mass_generalization",
+    "pseudoscientific_racism",
+    "replacement_theory",
+    "genetic_determinism",
+    "moral_panic",
+    "pathologizing_language",
+    "coded_antisemitism",
+    "biological_sexism",
+    "contamination_metaphor",
+    "historical_revisionism",
+    "blood_purity_ideology",
+    "cultural_invasion_narrative",
+    "utilitarian_dehumanization",
+    "behavioral_essentialism",
+    "victimhood_narrative",
+    "pathologizing_identity",
+    "civilization_threat_narrative",
+    "civilizational_hierarchy",
+    "ethnic_essentialism",
+    "gender_role_fundamentalism",
+    "religious_demonization",
+    "racial_preservation_ideology",
+    "coded_white_nationalism"
+  ],
+  "detection_keywords": [
+    "inferior", "subhuman", "parasite", "degenerate", "disease", "purify", "replace",
+    "invasion", "genocide", "bloodline", "purity", "natural order", "cultural marxism",
+    "great replacement", "born thieves", "genetic", "predisposed", "barbaric"
+  ]
+}

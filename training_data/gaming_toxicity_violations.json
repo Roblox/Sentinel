@@ -1,0 +1,191 @@
+{
+  "category": "gaming_toxicity_violations", 
+  "description": "Gaming-specific toxic behavior and competitive manipulation",
+  "severity": 3,
+  "platforms": ["discord", "roblox", "twitch", "general"],
+  "usage_restriction": "DEFENSIVE SECURITY ONLY - For training gaming toxicity detection systems",
+  "examples": [
+    {
+      "text": "you're trash at this game, uninstall and never play again",
+      "violation_type": "skill_shaming",
+      "platform": "general",
+      "pattern": "game_skill_attack"
+    },
+    {
+      "text": "I'm going to int and throw this game because of you noobs",
+      "violation_type": "intentional_feeding",
+      "platform": "general", 
+      "pattern": "competitive_griefing"
+    },
+    {
+      "text": "get cancer and die you feeding piece of trash",
+      "violation_type": "gaming_death_threat",
+      "platform": "general",
+      "pattern": "game_rage_escalation"
+    },
+    {
+      "text": "everyone report this player for existing, they're ruining games",
+      "violation_type": "false_reporting_coordination",
+      "platform": "general",
+      "pattern": "system_abuse_gaming"
+    },
+    {
+      "text": "I'm going to stream snipe you every game until you quit",
+      "violation_type": "stream_sniping_threat",
+      "platform": "twitch",
+      "pattern": "competitive_harassment"
+    },
+    {
+      "text": "you play like a brain-dead monkey with no hands",
+      "violation_type": "dehumanizing_game_insult",
+      "platform": "general",
+      "pattern": "animal_comparison_gaming"
+    },
+    {
+      "text": "kys noob, you're the reason we're losing",
+      "violation_type": "abbreviated_suicide_encouragement",
+      "platform": "general",
+      "pattern": "gaming_suicide_incitement"
+    },
+    {
+      "text": "I'm going to grief your builds until you leave the server",
+      "violation_type": "griefing_threat",
+      "platform": "roblox",
+      "pattern": "creative_destruction_harassment"
+    },
+    {
+      "text": "your aim is so bad you must be playing with your feet",
+      "violation_type": "skill_mockery",
+      "platform": "general",
+      "pattern": "physical_ability_gaming_insult"
+    },
+    {
+      "text": "ez clap, you're all garbage players who should quit",
+      "violation_type": "victory_toxicity",
+      "platform": "general",
+      "pattern": "winning_unsportsmanlike_conduct"
+    },
+    {
+      "text": "I'm throwing this match, enjoy the loss because of your bad play",
+      "violation_type": "match_throwing",
+      "platform": "general",
+      "pattern": "competitive_sabotage"
+    },
+    {
+      "text": "your team is full of braindead bots, no wonder you lose",
+      "violation_type": "team_degradation",
+      "platform": "general",
+      "pattern": "collective_gaming_insult"
+    },
+    {
+      "text": "git gud scrub or uninstall and play something easier",
+      "violation_type": "skill_gate_keeping",
+      "platform": "general",
+      "pattern": "gaming_elitism"
+    },
+    {
+      "text": "I hope you get banned for being this bad at the game",
+      "violation_type": "false_ban_wishing",
+      "platform": "general",
+      "pattern": "punishment_wishing"
+    },
+    {
+      "text": "you're hardstuck low rank because you're genuinely terrible",
+      "violation_type": "rank_shaming",
+      "platform": "general",
+      "pattern": "competitive_status_attack"
+    },
+    {
+      "text": "stop feeding the enemy team you absolute bot",
+      "violation_type": "performance_attack",
+      "platform": "general",
+      "pattern": "mistake_punishment"
+    },
+    {
+      "text": "your gameplay makes me want to alt f4 and never play again",
+      "violation_type": "rage_quit_threat",
+      "platform": "general",
+      "pattern": "game_abandonment_threat"
+    },
+    {
+      "text": "I'm going to spawn camp you until you rage quit",
+      "violation_type": "spawn_camping_harassment",
+      "platform": "general",
+      "pattern": "respawn_exploitation"
+    },
+    {
+      "text": "you're so bad you must have bought your account",
+      "violation_type": "account_legitimacy_attack",
+      "platform": "general",
+      "pattern": "achievement_delegitimization"
+    },
+    {
+      "text": "everyone focus this player, they deserve to lose every game",
+      "violation_type": "targeting_coordination",
+      "platform": "general",
+      "pattern": "coordinated_gaming_harassment"
+    },
+    {
+      "text": "your building skills are trash, just give up and play something else",
+      "violation_type": "creative_skill_attack",
+      "platform": "roblox",
+      "pattern": "building_game_toxicity"
+    },
+    {
+      "text": "you're lagging so hard it's ruining the game for everyone",
+      "violation_type": "technical_shaming",
+      "platform": "general",
+      "pattern": "connection_quality_attack"
+    },
+    {
+      "text": "stop playing if you're going to be this useless to the team",
+      "violation_type": "team_value_attack",
+      "platform": "general",
+      "pattern": "contribution_minimization"
+    },
+    {
+      "text": "I'm going to make you rage quit by targeting you all game",
+      "violation_type": "targeted_harassment_gaming",
+      "platform": "general",
+      "pattern": "focused_competitive_harassment"
+    },
+    {
+      "text": "your character looks stupid and you play even worse",
+      "violation_type": "avatar_and_skill_attack",
+      "platform": "roblox",
+      "pattern": "appearance_and_performance_insult"
+    }
+  ],
+  "patterns_detected": [
+    "game_skill_attack",
+    "competitive_griefing", 
+    "game_rage_escalation",
+    "system_abuse_gaming",
+    "competitive_harassment",
+    "animal_comparison_gaming",
+    "gaming_suicide_incitement",
+    "creative_destruction_harassment",
+    "physical_ability_gaming_insult",
+    "winning_unsportsmanlike_conduct",
+    "competitive_sabotage",
+    "collective_gaming_insult",
+    "gaming_elitism",
+    "punishment_wishing",
+    "competitive_status_attack",
+    "mistake_punishment",
+    "game_abandonment_threat",
+    "respawn_exploitation",
+    "achievement_delegitimization",
+    "coordinated_gaming_harassment",
+    "building_game_toxicity",
+    "connection_quality_attack",
+    "contribution_minimization",
+    "focused_competitive_harassment",
+    "appearance_and_performance_insult"
+  ],
+  "detection_keywords": [
+    "noob", "trash", "feeding", "int", "throw", "kys", "ez", "scrub", "bot",
+    "git gud", "uninstall", "hardstuck", "spawn camp", "grief", "rage quit",
+    "stream snipe", "report", "useless", "braindead", "garbage player"
+  ]
+}
