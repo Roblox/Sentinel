@@ -136,6 +136,10 @@ saved_config = index.save(
     aws_secret_access_key="YOUR_SECRET_ACCESS_KEY"  # Optional if using environment credentials
 )
 
+## Testing for optimal Thresholds and data ratio's
+
+Usage of the 'examples\Example_Threshold_Script.py' script will allow for quick threshold checks for a variety of ratios, by default these are 10:1, 5:1 and 1:1 ratios. This has predefined example chat logs, and should, show optimal settings for the dataset being used based on an average score and average detection count.
+
 ## Choosing an aggregation strategy
 
 Different deployments optimize for different trade‑offs. You can swap in any aggregator using the `aggregation_function` argument:
