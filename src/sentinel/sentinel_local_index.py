@@ -175,7 +175,7 @@ class SentinelLocalIndex:
         path: str,
         aws_access_key_id: Optional[str] = None,
         aws_secret_access_key: Optional[str] = None,
-        negative_to_positive_ratio: float = 1.0,
+        negative_to_positive_ratio: Optional[float] = None,
     ) -> "SentinelLocalIndex":
         """
         Load the index from a path and returns a new SentinelLocalIndex instance.
@@ -185,6 +185,8 @@ class SentinelLocalIndex:
             aws_access_key_id: Optional AWS access key ID for S3 access.
             aws_secret_access_key: Optional AWS secret access key for S3 access.
             negative_to_positive_ratio: Ratio of negative examples to keep relative to positive examples.
+                                      If None (default), preserves the original ratio from the saved index.
+                                      If specified, downsamples negative examples to achieve the desired ratio.
 
         Returns:
             A new SentinelLocalIndex instance with the loaded model and embeddings.
@@ -219,13 +221,24 @@ class SentinelLocalIndex:
 
         return instance
 
-    def _apply_negative_ratio(self, negative_to_positive_ratio: float):
+    def _apply_negative_ratio(self, negative_to_positive_ratio: Optional[float]):
         """
         Apply the negative_to_positive_ratio to reduce the number of negative (common class) examples.
 
         Args:
             negative_to_positive_ratio: The ratio of negative samples to keep relative to positive samples.
+                                      If None, preserves the original ratio from the saved index.
         """
+        # If no ratio specified, preserve the original ratio (don't downsample)
+        if negative_to_positive_ratio is None:
+            LOG.info(
+                "Preserving original ratio: %d negative examples to %d positive examples (%.1f:1)",
+                self.negative_embeddings.shape[0],
+                self.positive_embeddings.shape[0],
+                self.negative_embeddings.shape[0] / self.positive_embeddings.shape[0],
+            )
+            return
+
         # Calculate the number of negative samples to keep
         num_negative_to_keep = int(
             self.positive_embeddings.shape[0] * negative_to_positive_ratio
