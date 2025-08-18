@@ -74,6 +74,11 @@ def create_user_profiles() -> Dict[str, List[str]]:
     ]
     
     # Sexual content examples
+    
+    """
+    Requires an index with sexual positive examples, current database only focuses on hate-speech.
+    As such information relating to sexual content has been removed from the codebase but can be added back by removing notes.
+    
     sexual_content = [
         "want to see me naked?",
         "send me some hot pics",
@@ -91,6 +96,7 @@ def create_user_profiles() -> Dict[str, List[str]]:
         "we could be alone together",
         "send nudes"
     ]
+    """
     
     users = {}
     
@@ -107,24 +113,24 @@ def create_user_profiles() -> Dict[str, List[str]]:
     
     # Sexual Content Focused Users (2 users)  
     for i in range(1, 3):
-        sexual_msgs = np.random.choice(sexual_content, size=10, replace=False).tolist()
+#        sexual_msgs = np.random.choice(sexual_content, size=10, replace=False).tolist() # Requires an index with positive sexual content examples
         normal_msgs = np.random.choice(normal_speech, size=5, replace=False).tolist()
-        users[f"sexual_user_{i}"] = sexual_msgs + normal_msgs
+        users[f"sexual_user_{i}"] =   normal_msgs
         np.random.shuffle(users[f"sexual_user_{i}"])
     
     # Mixed Content Users (2 users)
     for i in range(1, 3):
-        hate_msgs = np.random.choice(hate_speech, size=5, replace=False).tolist()
-        sexual_msgs = np.random.choice(sexual_content, size=5, replace=False).tolist()
+        hate_msgs = np.random.choice(hate_speech, size=5, replace=False).tolist() 
+#        sexual_msgs = np.random.choice(sexual_content, size=5, replace=False).tolist() # Requires an index with positive sexual content examples
         normal_msgs = np.random.choice(normal_speech, size=5, replace=False).tolist()
-        users[f"mixed_user_{i}"] = hate_msgs + sexual_msgs + normal_msgs
+        users[f"mixed_user_{i}"] = hate_msgs  + normal_msgs
         np.random.shuffle(users[f"mixed_user_{i}"])
     
     # All Types Combined User (1 user)
     hate_msgs = np.random.choice(hate_speech, size=7, replace=False).tolist()
-    sexual_msgs = np.random.choice(sexual_content, size=7, replace=False).tolist()
+#    sexual_msgs = np.random.choice(sexual_content, size=7, replace=False).tolist() # Requires an index with positive sexual content examples
     normal_msgs = np.random.choice(normal_speech, size=6, replace=False).tolist()
-    users["all_types_user"] = hate_msgs + sexual_msgs + normal_msgs
+    users["all_types_user"] = hate_msgs  + normal_msgs
     np.random.shuffle(users["all_types_user"])
     
     return users
@@ -220,11 +226,28 @@ def test_thresholds_and_ratios(review_mode: bool = False, results_only: bool = F
             mixed_users = [k for k in results.keys() if k.startswith('mixed_')]
             all_types_users = [k for k in results.keys() if k.startswith('all_types')]
             
-            # Message-level metrics
-            total_normal_messages = len(normal_users) * 15  # 15 normal messages per normal user
-            total_hate_messages = len(hate_users) * 10 + len(mixed_users) * 5 + len(all_types_users) * 7  # Actual hate messages
-            total_sexual_messages = len(sexual_users) * 10 + len(mixed_users) * 5 + len(all_types_users) * 7  # Actual sexual messages
-            total_problematic_messages = total_hate_messages + total_sexual_messages
+            # Message-level metrics - dynamically calculate based on actual user profiles
+            total_normal_messages = 0
+            total_hate_messages = 0
+            total_sexual_messages = 0
+            
+            # Count actual messages for each user type
+            for user_name, messages in users.items():
+                if user_name.startswith('normal_'):
+                    total_normal_messages += len(messages)
+                elif user_name.startswith('hate_') or user_name.startswith('mixed_') or user_name.startswith('all_types'):
+                    # Count hate messages in these users (excluding normal messages)
+                    if user_name.startswith('hate_'):
+                        total_hate_messages += 10  # 10 hate messages per hate user
+                    elif user_name.startswith('mixed_'):
+                        total_hate_messages += 5   # 5 hate messages per mixed user
+                    elif user_name.startswith('all_types'):
+                        total_hate_messages += 7   # 7 hate messages per all_types user
+                elif user_name.startswith('sexual_'):
+                    # Currently sexual users only have normal messages (sexual content commented out)
+                    total_normal_messages += len(messages)
+            
+            total_problematic_messages = total_hate_messages + total_sexual_messages 
             
             # False positives (normal messages flagged as problematic)
             false_positive_messages = sum(results[user]['positive_count'] for user in normal_users)
@@ -239,7 +262,7 @@ def test_thresholds_and_ratios(review_mode: bool = False, results_only: bool = F
             false_positive_rate_users = false_positive_users / len(normal_users) if normal_users else 0
             
             # Overall accuracy (correct classifications / total messages)
-            total_messages = len(results) * 15  # Each user has 15 messages
+            total_messages = sum(len(messages) for messages in users.values())  # Dynamic total based on actual message counts
             correct_normal_messages = total_normal_messages - false_positive_messages
             correct_problematic_messages = true_positive_messages
             message_accuracy = (correct_normal_messages + correct_problematic_messages) / total_messages
@@ -416,11 +439,11 @@ def test_thresholds_and_ratios(review_mode: bool = False, results_only: bool = F
         if zero_fp_configs:
             # Among zero FP configs, find best true positive rate
             best_zero_fp = max(zero_fp_configs, key=lambda x: x['true_positive_rate'])
-            print(f"Best zero false positive: {best_zero_fp['ratio']}:1 @ {best_zero_fp['threshold']} (TP: {best_zero_fp['true_positive_rate']:.1%}, Analysis: {best_zero_fp['analysis_time']:.3f}s)")
+            print(f"Best zero false positive: {best_zero_fp['ratio']}:1 @ {best_zero_fp['threshold']} ({best_zero_fp['analysis_time']:.3f}s TP: {best_zero_fp['true_positive_rate']:.1%})")
         
         # Best overall accuracy
         best_accuracy = max(performance_metrics, key=lambda x: x['message_accuracy'])
-        print(f"Best message accuracy: {best_accuracy['ratio']}:1 @ {best_accuracy['threshold']} ({best_accuracy['message_accuracy']:.1%} accuracy, {best_accuracy['false_positive_rate_messages']:.1%} FP)")
+        print(f"Best message accuracy: {best_accuracy['ratio']}:1 @ {best_accuracy['threshold']} ({best_accuracy['analysis_time']:.3f}s {best_accuracy['message_accuracy']:.1%} accuracy, {best_accuracy['false_positive_rate_messages']:.1%} FP)")
         
         # Fastest with reasonable accuracy (>90%)
         fast_accurate = [m for m in performance_metrics if m['message_accuracy'] > 0.9]
