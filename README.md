@@ -139,6 +139,7 @@ saved_config = index.save(
 ## Testing for optimal Thresholds and data ratio's
 
 Usage of the 'examples\Example_Threshold_Script.py' script will allow for quick threshold checks for a variety of ratios, by default these are 10:1, 5:1 and 1:1 ratios. This has predefined example chat logs, and should, show optimal settings for the dataset being used based on an average score and average detection count.
+You will be able to get detailed information output in the ratios with the -r or --review flags.
 
 ## Choosing an aggregation strategy
 

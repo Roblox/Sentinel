@@ -4,6 +4,11 @@ Comprehensive Testing Dataset for Sentinel Hate Speech Detection
 
 This module creates realistic user profiles with different speech patterns
 to test threshold behavior and aggregation performance.
+To better review statistics, messages and reasoning run the file with a --review or -r flag
+Current optimal settings are at a 5:1 at a 0.01 temperature, as 1:1 at any temperature either underflags or gives false flags.
+
+
+poetry run python examples/Example_Threshold_Script.py [FLAGS]
 
 User Types:
 - Normal Speech Only (3 users)
@@ -119,15 +124,22 @@ def create_user_profiles() -> Dict[str, List[str]]:
     
     return users
 
-def test_thresholds_and_ratios():
-    """Test different threshold and ratio combinations."""
+def test_thresholds_and_ratios(review_mode: bool = False):
+    """Test different threshold and ratio combinations.
+    
+    Args:
+        review_mode: If True, shows detailed per-user analysis and missed detections
+    """
     
     print("🧪 COMPREHENSIVE SENTINEL TESTING")
+    if review_mode:
+        print("📋 REVIEW MODE: Detailed analysis enabled")
     print("=" * 50)
     
     # Load index with different ratios
     ratios_to_test = [10.0, 5.0, 1.0]
-    thresholds_to_test = [0.0, 0.01, 0.05, 0.1]
+    # Temperature as defined in the model.
+    thresholds_to_test = [0.0, 0.01, 0.05, 0.1] 
     
     users = create_user_profiles()
     
@@ -201,15 +213,102 @@ def test_thresholds_and_ratios():
             if normal_scores and problematic_scores:
                 separation = np.mean(problematic_scores) - np.mean(normal_scores)
                 print(f"  📈 Separation: {separation:.4f} (higher is better)")
+            
+            # Detailed review mode analysis
+            if review_mode:
+                print("\n🔍 DETAILED REVIEW:")
+                
+                # Analyze missed detections (problematic users with low scores)
+                missed_detections = []
+                false_positives = []
+                
+                for category, user_list in categories.items():
+                    if not user_list:
+                        continue
+                        
+                    print(f"\n  📊 {category} Analysis:")
+                    
+                    for user in user_list:
+                        user_result = results[user]
+                        score = user_result['overall_score']
+                        detections = user_result['positive_count']
+                        max_score = user_result['max_score']
+                        
+                        # Determine if this should be flagged based on category
+                        should_be_flagged = not user.startswith('normal_')
+                        is_flagged = score > 0.1  # Using 0.1 as detection threshold
+                        
+                        status = "✅" if (should_be_flagged == is_flagged) else "❌"
+                        
+                        print(f"    {status} {user:15}: score={score:.4f}, detections={detections:2d}, max={max_score:.4f}")
+                        
+                        # Track problematic cases
+                        if should_be_flagged and not is_flagged:
+                            missed_detections.append({
+                                'user': user,
+                                'category': category,
+                                'score': score,
+                                'detections': detections,
+                                'max_score': max_score
+                            })
+                        elif not should_be_flagged and is_flagged:
+                            false_positives.append({
+                                'user': user,
+                                'category': category,
+                                'score': score,
+                                'detections': detections,
+                                'max_score': max_score
+                            })
+                
+                # Summary of issues
+                if missed_detections:
+                    print(f"\n  ⚠️  MISSED DETECTIONS ({len(missed_detections)}):")
+                    for miss in missed_detections:
+                        print(f"    - {miss['user']} ({miss['category']}): score={miss['score']:.4f}")
+                
+                if false_positives:
+                    print(f"\n  🚨 FALSE POSITIVES ({len(false_positives)}):")
+                    for fp in false_positives:
+                        print(f"    - {fp['user']} ({fp['category']}): score={fp['score']:.4f}")
+                
+                if not missed_detections and not false_positives:
+                    print(f"\n  🎯 PERFECT CLASSIFICATION at threshold {threshold}")
+                
+                # Show sample messages for problematic cases
+                if missed_detections and len(missed_detections) <= 2:
+                    print(f"\n  📝 Sample messages from missed detections:")
+                    for miss in missed_detections[:2]:
+                        user_name = miss['user']
+                        user_messages = users[user_name]
+                        print(f"\n    {user_name} messages (showing first 5):")
+                        for i, msg in enumerate(user_messages[:5]):
+                            print(f"      {i+1}. \"{msg}\"")
+                
+                print(f"\n  📊 Classification Summary:")
+                total_users = len([u for cat in categories.values() for u in cat])
+                correct_classifications = total_users - len(missed_detections) - len(false_positives)
+                accuracy = correct_classifications / total_users if total_users > 0 else 0
+                print(f"    Accuracy: {accuracy:.2%} ({correct_classifications}/{total_users})")
+                print(f"    Missed: {len(missed_detections)}, False Positives: {len(false_positives)}")
 
 def main():
     """Run the comprehensive testing."""
+    import sys
+    
+    # Check for review flag
+    review_mode = '--review' in sys.argv or '-r' in sys.argv
+    
+    if review_mode:
+        print("🔍 Review mode enabled - showing detailed analysis")
+    
     # Set random seed for reproducible results
     np.random.seed(42)
     
-    test_thresholds_and_ratios()
+    test_thresholds_and_ratios(review_mode=review_mode)
     
     print(f"\n✅ Testing complete! Check results above to determine optimal threshold and ratio.")
+    if not review_mode:
+        print("💡 Tip: Run with --review or -r flag for detailed per-user analysis")
 
 if __name__ == "__main__":
     main()
