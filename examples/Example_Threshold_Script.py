@@ -108,14 +108,14 @@ def create_user_profiles() -> Dict[str, List[str]]:
     for i in range(1, 3):
         hate_msgs = np.random.choice(hate_speech, size=10, replace=False).tolist()
         normal_msgs = np.random.choice(normal_speech, size=5, replace=False).tolist()
-        users[f"hate_user_{i}"] = hate_msgs + normal_msgs
+        users[f"hate_user_{i}"] = hate_msgs + normal_msgs 
         np.random.shuffle(users[f"hate_user_{i}"])
     
     # Sexual Content Focused Users (2 users)  
     for i in range(1, 3):
 #        sexual_msgs = np.random.choice(sexual_content, size=10, replace=False).tolist() # Requires an index with positive sexual content examples
         normal_msgs = np.random.choice(normal_speech, size=5, replace=False).tolist()
-        users[f"sexual_user_{i}"] =   normal_msgs
+        users[f"sexual_user_{i}"] =   normal_msgs # + sexual_msgs
         np.random.shuffle(users[f"sexual_user_{i}"])
     
     # Mixed Content Users (2 users)
@@ -123,14 +123,14 @@ def create_user_profiles() -> Dict[str, List[str]]:
         hate_msgs = np.random.choice(hate_speech, size=5, replace=False).tolist() 
 #        sexual_msgs = np.random.choice(sexual_content, size=5, replace=False).tolist() # Requires an index with positive sexual content examples
         normal_msgs = np.random.choice(normal_speech, size=5, replace=False).tolist()
-        users[f"mixed_user_{i}"] = hate_msgs  + normal_msgs
+        users[f"mixed_user_{i}"] = hate_msgs  + normal_msgs # + sexual_msgs
         np.random.shuffle(users[f"mixed_user_{i}"])
     
     # All Types Combined User (1 user)
     hate_msgs = np.random.choice(hate_speech, size=7, replace=False).tolist()
 #    sexual_msgs = np.random.choice(sexual_content, size=7, replace=False).tolist() # Requires an index with positive sexual content examples
     normal_msgs = np.random.choice(normal_speech, size=6, replace=False).tolist()
-    users["all_types_user"] = hate_msgs  + normal_msgs
+    users["all_types_user"] = hate_msgs  + normal_msgs # + sexual_msgs
     np.random.shuffle(users["all_types_user"])
     
     return users
