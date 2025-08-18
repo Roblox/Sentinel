@@ -17,7 +17,12 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from sentinel.embeddings.sbert import get_sentence_transformer_and_scaling_fn
+from sentinel.embeddings.sbert import (
+    get_sentence_transformer_and_scaling_fn,
+    clear_model_cache,
+    get_cache_info,
+    remove_from_cache,
+)
 
 
 class TestSBERT:
@@ -89,3 +94,43 @@ class TestSBERT:
                 assert 0.0 <= scaled <= 1.0
         else:
             assert scale_fn is None
+
+    @patch("sentinel.embeddings.sbert.SentenceTransformer")
+    def test_model_caching(self, mock_transformer):
+        """Test that model caching works correctly."""
+        # Setup mock
+        mock_instance = MagicMock()
+        mock_transformer.return_value = mock_instance
+        
+        # Clear cache to start fresh
+        clear_model_cache()
+        
+        model_name = "test-model"
+        
+        # First call should create the model
+        model1, scale_fn1 = get_sentence_transformer_and_scaling_fn(model_name, use_cache=True)
+        assert mock_transformer.call_count == 1
+        
+        # Second call should use cached model
+        model2, scale_fn2 = get_sentence_transformer_and_scaling_fn(model_name, use_cache=True)
+        assert mock_transformer.call_count == 1  # Still 1, no new creation
+        assert model1 is model2  # Same model instance
+        
+        # Test cache info
+        cache_info = get_cache_info()
+        assert model_name in cache_info["cached_models"]
+        assert cache_info["cache_size"] == 1
+        
+        # Test removing from cache
+        assert remove_from_cache(model_name) is True
+        assert remove_from_cache(model_name) is False  # Already removed
+        
+        # Test with caching disabled
+        model3, scale_fn3 = get_sentence_transformer_and_scaling_fn(model_name, use_cache=False)
+        assert mock_transformer.call_count == 2  # New creation
+        
+        # Test clearing cache
+        get_sentence_transformer_and_scaling_fn("another-model", use_cache=True)
+        clear_model_cache()
+        cache_info_after_clear = get_cache_info()
+        assert cache_info_after_clear["cache_size"] == 0
