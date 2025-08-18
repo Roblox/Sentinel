@@ -175,7 +175,7 @@ class SentinelLocalIndex:
         path: str,
         aws_access_key_id: Optional[str] = None,
         aws_secret_access_key: Optional[str] = None,
-        negative_to_positive_ratio: Optional[float] = None,
+        negative_to_positive_ratio: Optional[float] = 5.0,
     ) -> "SentinelLocalIndex":
         """
         Load the index from a path and returns a new SentinelLocalIndex instance.
@@ -185,7 +185,8 @@ class SentinelLocalIndex:
             aws_access_key_id: Optional AWS access key ID for S3 access.
             aws_secret_access_key: Optional AWS secret access key for S3 access.
             negative_to_positive_ratio: Ratio of negative examples to keep relative to positive examples.
-                                      If None (default), preserves the original ratio from the saved index.
+                                      If None, preserves the original ratio from the saved index.
+                                      If 5.0 (default), uses a 5:1 negative to positive ratio for optimal performance.
                                       If specified, downsamples negative examples to achieve the desired ratio.
 
         Returns:
@@ -228,8 +229,9 @@ class SentinelLocalIndex:
         Args:
             negative_to_positive_ratio: The ratio of negative samples to keep relative to positive samples.
                                       If None, preserves the original ratio from the saved index.
+                                      If 5.0 (default), uses optimized 5:1 ratio for best performance.
         """
-        # If no ratio specified, preserve the original ratio (don't downsample)
+        # Handle null/invalid inputs - preserve original ratio if any issues occur
         if negative_to_positive_ratio is None:
             LOG.info(
                 "Preserving original ratio: %d negative examples to %d positive examples (%.1f:1)",
@@ -239,10 +241,34 @@ class SentinelLocalIndex:
             )
             return
 
+        # Check for null embeddings
+        if self.positive_embeddings is None or self.negative_embeddings is None:
+            LOG.warning("Null embeddings detected - cannot apply ratio adjustment")
+            return
+
+        # Check for empty embeddings
+        if self.positive_embeddings.shape[0] == 0 or self.negative_embeddings.shape[0] == 0:
+            LOG.warning("Empty embeddings detected - cannot apply ratio adjustment")
+            return
+
+        # Check for invalid ratio values
+        if negative_to_positive_ratio <= 0:
+            LOG.warning("Invalid ratio %f - must be positive. Preserving original ratio.", negative_to_positive_ratio)
+            return
+
         # Calculate the number of negative samples to keep
-        num_negative_to_keep = int(
-            self.positive_embeddings.shape[0] * negative_to_positive_ratio
-        )
+        try:
+            num_negative_to_keep = int(
+                self.positive_embeddings.shape[0] * negative_to_positive_ratio
+            )
+        except (ValueError, OverflowError, TypeError) as e:
+            LOG.warning("Error calculating negative samples to keep: %s. Preserving original ratio.", str(e))
+            return
+
+        # Check if calculation resulted in valid number
+        if num_negative_to_keep <= 0:
+            LOG.warning("Calculated negative samples to keep is %d - invalid. Preserving original ratio.", num_negative_to_keep)
+            return
 
         if self.negative_embeddings.shape[0] > num_negative_to_keep:
             LOG.info(
@@ -250,11 +276,15 @@ class SentinelLocalIndex:
                 num_negative_to_keep,
                 self.negative_embeddings.shape[0],
             )
-            # Randomly select a subset of the negative examples
-            indices = torch.randperm(self.negative_embeddings.shape[0])[
-                :num_negative_to_keep
-            ]
-            self.negative_embeddings = self.negative_embeddings[indices]
+            # Randomly select a subset of the negative examples with error handling
+            try:
+                indices = torch.randperm(self.negative_embeddings.shape[0])[
+                    :num_negative_to_keep
+                ]
+                self.negative_embeddings = self.negative_embeddings[indices]
+            except (RuntimeError, IndexError, TypeError) as e:
+                LOG.error("Error during negative embedding downsampling: %s. Preserving original embeddings.", str(e))
+                return
         else:
             LOG.info(
                 "User requested %d negative examples but the model loaded only has %d",
