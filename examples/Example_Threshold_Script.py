@@ -4,11 +4,15 @@ Comprehensive Testing Dataset for Sentinel Hate Speech Detection
 
 This module creates realistic user profiles with different speech patterns
 to test threshold behavior and aggregation performance.
-To better review statistics, messages and reasoning run the file with a --review or -r flag
+This will also show the time scale for each itteration to ensure efficient
+output time and load times for better optimisation.
+
 Current optimal settings are at a 5:1 at a 0.01 temperature, as 1:1 at any temperature either underflags or gives false flags.
 
 
 poetry run python examples/Example_Threshold_Script.py [FLAGS]
+  --review, -r          Show detailed per-user analysis and missed detections
+  --results-only        Show only rare class affinity scores per user (compact output)
 
 User Types:
 - Normal Speech Only (3 users)
@@ -20,6 +24,7 @@ User Types:
 
 from sentinel.sentinel_local_index import SentinelLocalIndex
 import numpy as np
+import time
 from typing import Dict, List, Tuple
 
 def create_user_profiles() -> Dict[str, List[str]]:
@@ -124,35 +129,49 @@ def create_user_profiles() -> Dict[str, List[str]]:
     
     return users
 
-def test_thresholds_and_ratios(review_mode: bool = False):
+def test_thresholds_and_ratios(review_mode: bool = False, results_only: bool = False):
     """Test different threshold and ratio combinations.
     
     Args:
         review_mode: If True, shows detailed per-user analysis and missed detections
+        results_only: If True, shows only the rare class affinity scores per user
     """
+    
+    overall_start_time = time.time()
     
     print("🧪 COMPREHENSIVE SENTINEL TESTING")
     if review_mode:
         print("📋 REVIEW MODE: Detailed analysis enabled")
+    elif results_only:
+        print("📊 RESULTS ONLY MODE: Showing rare class affinity scores per user")
+    print("⏱️  PERFORMANCE METRICS: Timing data collection enabled")
     print("=" * 50)
     
     # Load index with different ratios
-    ratios_to_test = [10.0, 5.0, 1.0]
+    ratios_to_test = [10.0, 5.0, 4.0, 3.0, 2.0, 1.0]
     # Temperature as defined in the model.
-    thresholds_to_test = [0.0, 0.01, 0.05, 0.1] 
+    thresholds_to_test = [0.0, 0.01, 0.25, 0.05, 0.1] 
     
     users = create_user_profiles()
+    
+    # Performance tracking
+    total_load_time = 0
+    total_analysis_time = 0
+    performance_metrics = []
     
     for ratio in ratios_to_test:
         ratio_name = "Original" if ratio is None else f"{ratio}:1"
         print(f"\n📊 TESTING RATIO: {ratio_name}")
         print("-" * 30)
         
-        # Load index with specific ratio
+        # Time data loading
+        load_start = time.time()
         index = SentinelLocalIndex.load(
             path="path/to/local/index",
             negative_to_positive_ratio=ratio
         )
+        load_time = time.time() - load_start
+        total_load_time += load_time
         
         # Or load from S3
         
@@ -164,9 +183,13 @@ def test_thresholds_and_ratios(review_mode: bool = False):
         # )
         
         print(f"Loaded shapes: pos={index.positive_embeddings.shape[0]}, neg={index.negative_embeddings.shape[0]}")
+        print(f"⏱️  Load time: {load_time:.3f}s")
         
         for threshold in thresholds_to_test:
             print(f"\n🎯 Threshold: {threshold}")
+            
+            # Time analysis phase
+            analysis_start = time.time()
             
             results = {}
             
@@ -183,10 +206,94 @@ def test_thresholds_and_ratios(review_mode: bool = False):
                     'overall_score': result.rare_class_affinity_score,
                     'positive_count': len(positive_scores),
                     'max_score': max(result.observation_scores.values()) if result.observation_scores.values() else 0,
-                    'avg_positive': np.mean(positive_scores) if positive_scores else 0
+                    'avg_positive': np.mean(positive_scores) if positive_scores else 0,
+                    'result_object': result  # Store the full result for results_only mode
                 }
             
-            # Categorize and display results
+            analysis_time = time.time() - analysis_start
+            total_analysis_time += analysis_time
+            
+            # Calculate comprehensive metrics
+            normal_users = [k for k in results.keys() if k.startswith('normal_')]
+            hate_users = [k for k in results.keys() if k.startswith('hate_')]
+            sexual_users = [k for k in results.keys() if k.startswith('sexual_')]
+            mixed_users = [k for k in results.keys() if k.startswith('mixed_')]
+            all_types_users = [k for k in results.keys() if k.startswith('all_types')]
+            
+            # Message-level metrics
+            total_normal_messages = len(normal_users) * 15  # 15 normal messages per normal user
+            total_hate_messages = len(hate_users) * 10 + len(mixed_users) * 5 + len(all_types_users) * 7  # Actual hate messages
+            total_sexual_messages = len(sexual_users) * 10 + len(mixed_users) * 5 + len(all_types_users) * 7  # Actual sexual messages
+            total_problematic_messages = total_hate_messages + total_sexual_messages
+            
+            # False positives (normal messages flagged as problematic)
+            false_positive_messages = sum(results[user]['positive_count'] for user in normal_users)
+            false_positive_rate_messages = false_positive_messages / total_normal_messages if total_normal_messages > 0 else 0
+            
+            # True positives (hate/mixed messages correctly flagged - focusing on hate detection)
+            true_positive_messages = sum(results[user]['positive_count'] for user in hate_users + mixed_users + all_types_users)
+            true_positive_rate = true_positive_messages / total_problematic_messages if total_problematic_messages > 0 else 0
+            
+            # User-level false positives (for comparison)
+            false_positive_users = sum(1 for user in normal_users if results[user]['overall_score'] > 0.01)
+            false_positive_rate_users = false_positive_users / len(normal_users) if normal_users else 0
+            
+            # Overall accuracy (correct classifications / total messages)
+            total_messages = len(results) * 15  # Each user has 15 messages
+            correct_normal_messages = total_normal_messages - false_positive_messages
+            correct_problematic_messages = true_positive_messages
+            message_accuracy = (correct_normal_messages + correct_problematic_messages) / total_messages
+            
+            # Store comprehensive performance metrics
+            performance_metrics.append({
+                'ratio': ratio,
+                'threshold': threshold,
+                'load_time': load_time,
+                'analysis_time': analysis_time,
+                'false_positive_rate_messages': false_positive_rate_messages,
+                'false_positive_rate_users': false_positive_rate_users,
+                'false_positive_messages': false_positive_messages,
+                'false_positive_users': false_positive_users,
+                'true_positive_rate': true_positive_rate,
+                'true_positive_messages': true_positive_messages,
+                'message_accuracy': message_accuracy,
+                'total_messages': total_messages,
+                'total_normal_messages': total_normal_messages,
+                'total_problematic_messages': total_problematic_messages
+            })
+            
+            print(f"⏱️  Analysis: {analysis_time:.3f}s | FP Messages: {false_positive_messages}/{total_normal_messages} ({false_positive_rate_messages:.1%}) | TP Rate: {true_positive_rate:.1%} | Accuracy: {message_accuracy:.1%}")
+            
+            # Results-only mode: show just the scores per user
+            if results_only:
+                print(f"\n🎯 User Rare Class Affinity Scores (Threshold: {threshold}):")
+                
+                # Group users by category for organized display
+                categories = {
+                    'Normal Users': [k for k in results.keys() if k.startswith('normal_')],
+                    'Hate Users': [k for k in results.keys() if k.startswith('hate_')], 
+                    'Sexual Users': [k for k in results.keys() if k.startswith('sexual_')],
+                    'Mixed Users': [k for k in results.keys() if k.startswith('mixed_')],
+                    'All Types': [k for k in results.keys() if k.startswith('all_types')]
+                }
+                
+                for category, user_list in categories.items():
+                    if not user_list:
+                        continue
+                    print(f"\n  📊 {category}:")
+                    for user in user_list:
+                        score = results[user]['overall_score']
+                        detections = results[user]['positive_count']
+                        # Enhanced FP indicator with message context
+                        if user.startswith('normal_') and detections > 0:
+                            fp_indicator = f" ⚠️ FP ({detections}/15 msgs)"
+                        else:
+                            fp_indicator = ""
+                        print(f"    {user:20}: score={score:.4f} ({detections} detections){fp_indicator}")
+                
+                continue  # Skip the normal summary output
+            
+            # Categorize and display results (normal mode)
             categories = {
                 'Normal Users': [k for k in results.keys() if k.startswith('normal_')],
                 'Hate Users': [k for k in results.keys() if k.startswith('hate_')], 
@@ -291,24 +398,75 @@ def test_thresholds_and_ratios(review_mode: bool = False):
                 print(f"    Accuracy: {accuracy:.2%} ({correct_classifications}/{total_users})")
                 print(f"    Missed: {len(missed_detections)}, False Positives: {len(false_positives)}")
 
+    # Performance summary
+    overall_time = time.time() - overall_start_time
+    
+    print(f"\n⏱️  PERFORMANCE SUMMARY")
+    print("=" * 50)
+    print(f"Total execution time: {overall_time:.3f}s")
+    print(f"Total data load time: {total_load_time:.3f}s ({total_load_time/overall_time:.1%})")
+    print(f"Total analysis time: {total_analysis_time:.3f}s ({total_analysis_time/overall_time:.1%})")
+    
+    # Best performance metrics
+    if performance_metrics:
+        print(f"\n📊 OPTIMIZATION METRICS:")
+        
+        # Find optimal configurations based on comprehensive metrics
+        zero_fp_configs = [m for m in performance_metrics if m['false_positive_rate_messages'] == 0]
+        if zero_fp_configs:
+            # Among zero FP configs, find best true positive rate
+            best_zero_fp = max(zero_fp_configs, key=lambda x: x['true_positive_rate'])
+            print(f"Best zero false positive: {best_zero_fp['ratio']}:1 @ {best_zero_fp['threshold']} (TP: {best_zero_fp['true_positive_rate']:.1%}, Analysis: {best_zero_fp['analysis_time']:.3f}s)")
+        
+        # Best overall accuracy
+        best_accuracy = max(performance_metrics, key=lambda x: x['message_accuracy'])
+        print(f"Best message accuracy: {best_accuracy['ratio']}:1 @ {best_accuracy['threshold']} ({best_accuracy['message_accuracy']:.1%} accuracy, {best_accuracy['false_positive_rate_messages']:.1%} FP)")
+        
+        # Fastest with reasonable accuracy (>90%)
+        fast_accurate = [m for m in performance_metrics if m['message_accuracy'] > 0.9]
+        if fast_accurate:
+            fastest_accurate = min(fast_accurate, key=lambda x: x['analysis_time'])
+            print(f"Fastest with >90% accuracy: {fastest_accurate['ratio']}:1 @ {fastest_accurate['threshold']} ({fastest_accurate['analysis_time']:.3f}s, {fastest_accurate['message_accuracy']:.1%} acc)")
+        
+        fastest_overall = min(performance_metrics, key=lambda x: x['analysis_time'])
+        print(f"Fastest analysis overall: {fastest_overall['ratio']}:1 @ {fastest_overall['threshold']} ({fastest_overall['analysis_time']:.3f}s, {fastest_overall['message_accuracy']:.1%} acc, {fastest_overall['false_positive_rate_messages']:.1%} FP)")
+        
+        # Performance by ratio with message-level metrics
+        print(f"\nMessage-level performance by ratio:")
+        for ratio in ratios_to_test:
+            ratio_metrics = [m for m in performance_metrics if m['ratio'] == ratio]
+            avg_time = np.mean([m['analysis_time'] for m in ratio_metrics])
+            avg_fp_rate = np.mean([m['false_positive_rate_messages'] for m in ratio_metrics])
+            avg_tp_rate = np.mean([m['true_positive_rate'] for m in ratio_metrics])
+            avg_accuracy = np.mean([m['message_accuracy'] for m in ratio_metrics])
+            print(f"  {ratio}:1 ratio: {avg_time:.3f}s avg, {avg_fp_rate:.1%} FP rate, {avg_tp_rate:.1%} TP rate, {avg_accuracy:.1%} accuracy")
+
 def main():
     """Run the comprehensive testing."""
     import sys
     
-    # Check for review flag
+    # Check for flags
     review_mode = '--review' in sys.argv or '-r' in sys.argv
+    results_only = '--results-only' in sys.argv or '--results' in sys.argv
+    
+    # Ensure mutually exclusive modes
+    if review_mode and results_only:
+        print("❌ Error: Cannot use both --review and --results-only flags simultaneously")
+        sys.exit(1)
     
     if review_mode:
         print("🔍 Review mode enabled - showing detailed analysis")
+    elif results_only:
+        print("📊 Results-only mode enabled - showing rare class affinity scores per user")
     
     # Set random seed for reproducible results
     np.random.seed(42)
     
-    test_thresholds_and_ratios(review_mode=review_mode)
+    test_thresholds_and_ratios(review_mode=review_mode, results_only=results_only)
     
     print(f"\n✅ Testing complete! Check results above to determine optimal threshold and ratio.")
-    if not review_mode:
-        print("💡 Tip: Run with --review or -r flag for detailed per-user analysis")
+    if not review_mode and not results_only:
+        print("💡 Tip: Run with --review (-r) for detailed analysis or --results-only for user scores only")
 
 if __name__ == "__main__":
     main()
