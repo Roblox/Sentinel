@@ -1,6 +1,6 @@
-# Contributing to sentinel
+# Contributing to Sentinel
 
-Thank you for your interest in contributing to sentinel! This document provides guidelines and instructions for contributing to this project.
+Thank you for your interest in contributing to Sentinel! This document provides guidelines and instructions for contributing to this project.
 
 ## Code of Conduct
 
