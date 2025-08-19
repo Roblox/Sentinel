@@ -309,7 +309,6 @@ class SentinelLocalIndex:
         # Use when simulating by sampling texts from the same data indexed.
     prevent_exact_match: bool = False,
     encoding_additional_kwargs: Mapping[str, Any] = {},
-    Cache_Model: bool = True,
     show_progress_bar: bool = False,
     ) -> RareClassAffinityResult:
         """Calculate rare class affinity for the given text samples in realtime.
@@ -330,7 +329,6 @@ class SentinelLocalIndex:
             min_score_to_consider: Threshold below which scores are set to 0.
             prevent_exact_match: Whether to skip exact matches when scoring.
             encoding_additional_kwargs: Additional keyword arguments for encoding.
-            Cache_Model: Whether to use model caching (currently not used in this method).
             show_progress_bar: Whether to display a progress bar during encoding.
 
         Returns:
