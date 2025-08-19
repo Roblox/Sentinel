@@ -74,20 +74,15 @@ def test_mean_of_positives():
     result = mean_of_positives(scores)
     assert result == 0.6, "Should ignore negative scores and return mean of positives"
 
-    # Test with all negative scores - will raise a RuntimeWarning, but we're checking that
-    # we handle the "mean of empty slice" case gracefully
-    with pytest.warns(RuntimeWarning):
-        scores = np.array([-0.5, -0.3, -0.7])
-        result = mean_of_positives(scores)
-        # When there's no positive scores, numpy returns NaN for an empty slice
-        assert np.isnan(
-            result
-        ), "Should return NaN when there are no positive scores"  # Test with empty array - will raise a RuntimeWarning
-        with pytest.warns(RuntimeWarning):
-            scores = np.array([])
-            result = mean_of_positives(scores)
-            # When there's an empty array, numpy returns NaN
-            assert np.isnan(result), "Should return NaN for empty array"
+    # Test with all negative scores - should return 0.0 like other functions
+    scores = np.array([-0.5, -0.3, -0.7])
+    result = mean_of_positives(scores)
+    assert result == 0.0, "Should return 0.0 when there are no positive scores"
+
+    # Test with empty array - should return 0.0 like other functions
+    scores = np.array([])
+    result = mean_of_positives(scores)
+    assert result == 0.0, "Should return 0.0 for empty array"
 
 
 def test_skewness():

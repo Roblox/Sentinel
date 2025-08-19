@@ -41,7 +41,12 @@ def mean_of_positives(scores: np.array) -> float:
     Returns:
         Mean of positive scores, indicating overall affinity to rare class content
     """
-    return np.mean(scores[scores > 0])
+    if scores.size == 0:
+        return 0.0
+    positives = scores[scores > 0]
+    if positives.size == 0:
+        return 0.0
+    return float(np.mean(positives))
 
 
 def skewness(scores: np.array, min_size_of_scores: int = 10) -> float:
