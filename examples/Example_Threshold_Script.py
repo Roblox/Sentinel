@@ -28,6 +28,7 @@ User Types:
 
 from sentinel.sentinel_local_index import SentinelLocalIndex
 from sentinel.embeddings.sbert import clear_model_cache, get_cache_info
+from test_data import NORMAL_SPEECH, HATE_SPEECH, SEXUAL_CONTENT
 import numpy as np
 import time
 from typing import Dict, List, Tuple
@@ -36,48 +37,10 @@ from typing import Dict, List, Tuple
 def create_user_profiles() -> Dict[str, List[str]]:
     """Create 10 different user profiles with varying speech patterns."""
 
-    # Normal speech examples
-    normal_speech = [
-        "Hey how are you doing today?",
-        "What are you up to this weekend?",
-        "I love this new video game",
-        "The weather is really nice today",
-        "Did you see that movie last night?",
-        "I'm going to the store later",
-        "Work was pretty busy today",
-        "Let's grab lunch sometime",
-        "That's a really cool picture",
-        "I just finished reading a great book",
-        "How was your vacation?",
-        "I'm excited for the weekend",
-        "Thanks for helping me out",
-        "Have a great day!",
-        "What's your favorite food?",
-        "I'm learning to cook pasta",
-        "The concert was amazing",
-        "I need to go shopping",
-        "My family is visiting next week",
-        "That joke was hilarious"
-    ]
+    # Import example data from test_data module
+    normal_speech = NORMAL_SPEECH  # 50 examples
+    hate_speech = HATE_SPEECH      # 50 examples
 
-    # Hate speech examples
-    hate_speech = [
-        "I hate all those people",
-        "they don't belong here",
-        "those immigrants are ruining everything",
-        "whites are superior to everyone else",
-        "the holocaust never happened",
-        "Hitler had the right idea",
-        "Jews control all the banks",
-        "Black people are all criminals",
-        "Muslims are all terrorists",
-        "gay people are disgusting",
-        "women belong in the kitchen",
-        "trans people are mentally ill",
-        "minorities are destroying our country",
-        "we need to get rid of them all",
-        "violence is the only solution"
-    ]
 
     # Sexual content examples
 
@@ -87,23 +50,7 @@ def create_user_profiles() -> Dict[str, List[str]]:
     As such information relating to sexual content has been removed from the
     codebase but can be added back by removing notes.
 
-    sexual_content = [
-        "want to see me naked?",
-        "send me some hot pics",
-        "let's hook up tonight",
-        "I'm so horny right now",
-        "what are you wearing?",
-        "wanna have some fun?",
-        "you look so sexy",
-        "let's get physical",
-        "I want to touch you",
-        "meet me in private",
-        "show me your body",
-        "let's talk dirty",
-        "I'm thinking about you",
-        "we could be alone together",
-        "send nudes"
-    ]
+    sexual_content = SEXUAL_SPEECH
     """
 
     users = {}
@@ -111,13 +58,13 @@ def create_user_profiles() -> Dict[str, List[str]]:
     # Normal Speech Only Users (3 users)
     for i in range(1, 4):
         users[f"normal_user_{i}"] = np.random.choice(
-            normal_speech, size=15, replace=False
+            normal_speech, size=35, replace=False
         ).tolist()
 
     # Hate Speech Focused Users (2 users)
     for i in range(1, 3):
         hate_msgs = np.random.choice(
-            hate_speech, size=10, replace=False
+            hate_speech, size=30, replace=False
         ).tolist()
         normal_msgs = np.random.choice(
             normal_speech, size=5, replace=False
@@ -126,36 +73,36 @@ def create_user_profiles() -> Dict[str, List[str]]:
         np.random.shuffle(users[f"hate_user_{i}"])
 
     # Sexual Content Focused Users (2 users)
-    for i in range(1, 3):
-        # sexual_msgs = np.random.choice(sexual_content, size=10,
-        #                                replace=False).tolist()
-        # Requires an index with positive sexual content examples
-        normal_msgs = np.random.choice(
-            normal_speech, size=5, replace=False
-        ).tolist()
-        users[f"sexual_user_{i}"] = normal_msgs  # + sexual_msgs
-        np.random.shuffle(users[f"sexual_user_{i}"])
+    # for i in range(1, 3):
+    #     sexual_msgs = np.random.choice(sexual_content, size=10,
+    #                                    replace=False).tolist()
+    #     Requires an index with positive sexual content examples
+    #     normal_msgs = np.random.choice(
+    #         normal_speech, size=5, replace=False
+    #     ).tolist()
+    #     users[f"sexual_user_{i}"] = normal_msgs  # + sexual_msgs
+    #     np.random.shuffle(users[f"sexual_user_{i}"])
 
     # Mixed Content Users (2 users)
     for i in range(1, 3):
         hate_msgs = np.random.choice(
-            hate_speech, size=5, replace=False
+            hate_speech, size=20, replace=False
         ).tolist()
         # sexual_msgs = np.random.choice(sexual_content, size=5,
         #                                replace=False).tolist()
         # Requires an index with positive sexual content examples
         normal_msgs = np.random.choice(
-            normal_speech, size=5, replace=False
+            normal_speech, size=15, replace=False
         ).tolist()
         users[f"mixed_user_{i}"] = hate_msgs + normal_msgs  # + sexual_msgs
         np.random.shuffle(users[f"mixed_user_{i}"])
 
     # All Types Combined User (1 user)
-    hate_msgs = np.random.choice(hate_speech, size=7, replace=False).tolist()
-    # sexual_msgs = np.random.choice(sexual_content, size=7,
+    hate_msgs = np.random.choice(hate_speech, size=10, replace=False).tolist()
+    # sexual_msgs = np.random.choice(sexual_content, size=10,
     #                                replace=False).tolist()
     # Requires an index with positive sexual content examples
-    normal_msgs = np.random.choice(normal_speech, size=6, replace=False).tolist()
+    normal_msgs = np.random.choice(normal_speech, size=10, replace=False).tolist()
     users["all_types_user"] = hate_msgs + normal_msgs  # + sexual_msgs
     np.random.shuffle(users["all_types_user"])
 
@@ -214,7 +161,7 @@ def test_thresholds_and_ratios(review_mode: bool = False,
         # Time data loading
         load_start = time.time()
         index = SentinelLocalIndex.load(
-            path="path/to/local/index",
+            path="./examples/hate_speech_model",
             negative_to_positive_ratio=ratio,
             Cache_Model=True
         )
