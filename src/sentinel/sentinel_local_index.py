@@ -176,6 +176,7 @@ class SentinelLocalIndex:
         aws_access_key_id: Optional[str] = None,
         aws_secret_access_key: Optional[str] = None,
         negative_to_positive_ratio: Optional[float] = 5.0,
+        Cache_Model: bool = True,
     ) -> "SentinelLocalIndex":
         """
         Load the index from a path and returns a new SentinelLocalIndex instance.
@@ -188,6 +189,7 @@ class SentinelLocalIndex:
                                       If None, preserves the original ratio from the saved index.
                                       If 5.0 (default), uses a 5:1 negative to positive ratio for optimal performance.
                                       If specified, downsamples negative examples to achieve the desired ratio.
+            Cache_Model: Whether to use model caching for faster subsequent loads. Default True.
 
         Returns:
             A new SentinelLocalIndex instance with the loaded model and embeddings.
@@ -205,7 +207,10 @@ class SentinelLocalIndex:
         # Create the sentence model and get the scaling function
         model_name = config.encoder_model_name_or_path
 
-        sentence_model, scale_fn = get_sentence_transformer_and_scaling_fn(model_name)
+        sentence_model, scale_fn = get_sentence_transformer_and_scaling_fn(
+            model_name,
+            use_cache = Cache_Model
+            )
 
         # Create a new instance with the loaded model and data
         instance = cls(
@@ -304,6 +309,7 @@ class SentinelLocalIndex:
         # Use when simulating by sampling texts from the same data indexed.
     prevent_exact_match: bool = False,
     encoding_additional_kwargs: Mapping[str, Any] = {},
+    Cache_Model: bool = True,
     show_progress_bar: bool = False,
     ) -> RareClassAffinityResult:
         """Calculate rare class affinity for the given text samples in realtime.
@@ -324,6 +330,7 @@ class SentinelLocalIndex:
             min_score_to_consider: Threshold below which scores are set to 0.
             prevent_exact_match: Whether to skip exact matches when scoring.
             encoding_additional_kwargs: Additional keyword arguments for encoding.
+            Cache_Model: Whether to use model caching (currently not used in this method).
             show_progress_bar: Whether to display a progress bar during encoding.
 
         Returns:

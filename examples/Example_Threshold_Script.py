@@ -215,7 +215,8 @@ def test_thresholds_and_ratios(review_mode: bool = False,
         load_start = time.time()
         index = SentinelLocalIndex.load(
             path="path/to/local/index",
-            negative_to_positive_ratio=ratio
+            negative_to_positive_ratio=ratio,
+            Cache_Model=True
         )
         load_time = time.time() - load_start
         total_load_time += load_time
@@ -262,7 +263,7 @@ def test_thresholds_and_ratios(review_mode: bool = False,
             for user_name, messages in users.items():
                 result = index.calculate_rare_class_affinity(
                     messages,
-                    min_score_to_consider=threshold
+                    min_score_to_consider=threshold,
                 )
 
                 # Calculate statistics
@@ -475,7 +476,8 @@ def test_thresholds_and_ratios(review_mode: bool = False,
                 'threshold': threshold,
                 'load_time': load_time,
                 'analysis_time': analysis_time,
-                'false_positive_rate_messages': fp_rate,  # Use the calculated rate
+                'false_positive_rate_messages': fp_rate,  # Use the calculated 
+                                                          # rate
                 'false_positive_rate_users': false_positive_rate_users,
                 'false_positive_messages': total_false_positives,
                 'false_positive_users': false_positive_users,
