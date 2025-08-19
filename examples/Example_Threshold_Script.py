@@ -214,7 +214,7 @@ def test_thresholds_and_ratios(review_mode: bool = False,
         # Time data loading
         load_start = time.time()
         index = SentinelLocalIndex.load(
-            path="./examples/hate_speech_model",
+            path="path/to/local/index",
             negative_to_positive_ratio=ratio
         )
         load_time = time.time() - load_start
