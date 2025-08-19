@@ -51,7 +51,7 @@ def get_sentence_transformer_and_scaling_fn(
         - A scaling function for similarity scores if needed (only for E5 family models), or None
     """
     global _model_cache
-    
+
     # Check cache first if caching is enabled
     if use_cache and sentence_model_name_or_path in _model_cache:
         LOG.debug(f"Loading cached SentenceTransformer model: {sentence_model_name_or_path}")
@@ -59,7 +59,7 @@ def get_sentence_transformer_and_scaling_fn(
     else:
         LOG.debug(f"Creating new SentenceTransformer model: {sentence_model_name_or_path}")
         model = SentenceTransformer(sentence_model_name_or_path)
-        
+
         # Cache the model if caching is enabled
         if use_cache:
             _model_cache[sentence_model_name_or_path] = model
@@ -95,7 +95,7 @@ def get_cache_info() -> dict:
     return {
         "cached_models": list(_model_cache.keys()),
         "cache_size": len(_model_cache),
-        "memory_info": "Use clear_model_cache() to free memory if needed"
+        "memory_info": "Use clear_model_cache() to free memory if needed",
     }
 
 
