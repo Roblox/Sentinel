@@ -31,7 +31,7 @@ from sentinel.embeddings.sbert import clear_model_cache, get_cache_info
 from test_data import NORMAL_SPEECH, HATE_SPEECH, SEXUAL_CONTENT
 import numpy as np
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 
 def create_user_profiles() -> Dict[str, List[str]]:
@@ -110,7 +110,9 @@ def create_user_profiles() -> Dict[str, List[str]]:
 
 
 def test_thresholds_and_ratios(review_mode: bool = False,
-                              results_only: bool = False):
+                              results_only: bool = False,
+                              no_cache: bool = False,
+                              ):
     """Test different threshold and ratio combinations.
 
     Args:
@@ -161,9 +163,9 @@ def test_thresholds_and_ratios(review_mode: bool = False,
         # Time data loading
         load_start = time.time()
         index = SentinelLocalIndex.load(
-            path="path/to/index",
+            path="path/to/local/index",
             negative_to_positive_ratio=ratio,
-            Cache_Model=True
+            Cache_Model=True & ~no_cache
         )
         load_time = time.time() - load_start
         total_load_time += load_time
@@ -719,6 +721,7 @@ def main():
     # Check for flags
     review_mode = '--review' in sys.argv or '-r' in sys.argv
     results_only = '--results-only' in sys.argv or '--results' in sys.argv
+    no_cache = '--no-cache' in sys.argv
 
     # Ensure mutually exclusive modes
     if review_mode and results_only:
@@ -731,12 +734,16 @@ def main():
     elif results_only:
         print("📊 Results-only mode enabled - showing rare class affinity "
               "scores per user")
+    elif no_cache:
+        print("Indexes will not be cached")
 
     # Set random seed for reproducible results
     np.random.seed(42)
 
     test_thresholds_and_ratios(review_mode=review_mode,
-                              results_only=results_only)
+                              results_only=results_only,
+                              no_cache=no_cache
+                              )
 
     # Final cache cleanup and summary
     final_cache_info = get_cache_info()
@@ -751,8 +758,8 @@ def main():
     if not review_mode and not results_only:
         print("💡 Tip: Run with --review (-r) for detailed analysis or "
               "--results-only for user scores only")
-        print("🔥 Performance: Model caching enabled - repeated runs "
-              "will be faster!")
+    if no_cache: 
+        print("Index has not been cached between models.")
 
 
 if __name__ == "__main__":

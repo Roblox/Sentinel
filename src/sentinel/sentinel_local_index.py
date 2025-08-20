@@ -176,7 +176,7 @@ class SentinelLocalIndex:
         aws_access_key_id: Optional[str] = None,
         aws_secret_access_key: Optional[str] = None,
         negative_to_positive_ratio: Optional[float] = 5.0,
-        Cache_Model: bool = True,
+        Cache_Model: bool = False,
     ) -> "SentinelLocalIndex":
         """
         Load the index from a path and returns a new SentinelLocalIndex instance.
