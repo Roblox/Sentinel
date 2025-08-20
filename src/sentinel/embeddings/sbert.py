@@ -19,9 +19,7 @@ This module provides functions for creating and working with SentenceTransformer
 """
 
 from typing import Callable, Optional, Tuple
-import os
 import logging
-from functools import lru_cache
 
 from sentence_transformers import SentenceTransformer
 
