@@ -21,6 +21,11 @@ from sentinel.score_formulae import (
     mean_of_positives,
     calculate_contrastive_score,
     skewness,
+    top_k_mean,
+    percentile_score,
+    softmax_weighted_mean,
+    max_score,
+    contrastive_components,
 )
 
 
@@ -70,20 +75,15 @@ def test_mean_of_positives():
     result = mean_of_positives(scores)
     assert result == 0.6, "Should ignore negative scores and return mean of positives"
 
-    # Test with all negative scores - will raise a RuntimeWarning, but we're checking that
-    # we handle the "mean of empty slice" case gracefully
-    with pytest.warns(RuntimeWarning):
-        scores = np.array([-0.5, -0.3, -0.7])
-        result = mean_of_positives(scores)
-        # When there's no positive scores, numpy returns NaN for an empty slice
-        assert np.isnan(
-            result
-        ), "Should return NaN when there are no positive scores"  # Test with empty array - will raise a RuntimeWarning
-        with pytest.warns(RuntimeWarning):
-            scores = np.array([])
-            result = mean_of_positives(scores)
-            # When there's an empty array, numpy returns NaN
-            assert np.isnan(result), "Should return NaN for empty array"
+    # Test with all negative scores - should return 0.0 like other functions
+    scores = np.array([-0.5, -0.3, -0.7])
+    result = mean_of_positives(scores)
+    assert result == 0.0, "Should return 0.0 when there are no positive scores"
+
+    # Test with empty array - should return 0.0 like other functions
+    scores = np.array([])
+    result = mean_of_positives(scores)
+    assert result == 0.0, "Should return 0.0 for empty array"
 
 
 def test_skewness():
@@ -125,3 +125,124 @@ def test_skewness():
     empty_scores = np.array([])
     result = skewness(empty_scores)
     assert np.isclose(result, 0.0), "Should return 0.0 for empty array"
+
+
+def test_additional_aggregators():
+    scores = np.array([0.0, 0.2, 0.5, 1.0, 0.7, -0.1, 0.3])
+
+    # top_k_mean
+    val = top_k_mean(scores, k=2)
+    assert np.isclose(val, np.mean([1.0, 0.7]))
+
+    # percentile_score
+    val = percentile_score(scores, q=50)
+    # positives are [0.2, 0.5, 1.0, 0.7, 0.3]; median = 0.5
+    assert np.isclose(val, 0.5)
+
+    # softmax_weighted_mean (temperature=1)
+    val = softmax_weighted_mean(scores, temperature=1.0)
+    assert val > 0.5 and val <= 1.0
+
+    # max_score
+    val = max_score(scores)
+    assert np.isclose(val, 1.0)
+
+
+def test_aggregation_functions_edge_cases():
+    """Test edge cases for aggregation functions to improve coverage."""
+    # Test top_k_mean with empty array (lines 98, 101)
+    empty_scores = np.array([])
+    assert top_k_mean(empty_scores) == 0.0
+    
+    # Test top_k_mean with no positive scores
+    negative_scores = np.array([-1, -2, -3])
+    assert top_k_mean(negative_scores) == 0.0
+    
+    # Test percentile_score with empty array (lines 119, 122)
+    assert percentile_score(empty_scores) == 0.0
+    
+    # Test percentile_score with no positive scores
+    assert percentile_score(negative_scores) == 0.0
+    
+    # Test softmax_weighted_mean with empty array (lines 139, 142)
+    assert softmax_weighted_mean(empty_scores) == 0.0
+    
+    # Test softmax_weighted_mean with no positive scores
+    assert softmax_weighted_mean(negative_scores) == 0.0
+    
+    # Test max_score with empty array (lines 155, 158)
+    assert max_score(empty_scores) == 0.0
+    
+    # Test max_score with no positive scores
+    assert max_score(negative_scores) == 0.0
+
+
+def test_contrastive_components_edge_cases():
+    """Test edge cases for contrastive_components function."""
+    # Test with divide by zero scenario (line 176)
+    # This is hard to trigger since we use exp(), but we can test normal operation
+    pos_sims = [0.5, 0.6]
+    neg_sims = [0.1, 0.2]
+    
+    pos_term, neg_term, log_ratio = contrastive_components(pos_sims, neg_sims)
+    
+    assert pos_term > 0
+    assert neg_term > 0
+    assert log_ratio != 0
+    
+    # Test when log_ratio would be infinity (line 188)
+    # This tests the inf handling in contrastive_components
+    very_high_pos = [10.0, 10.0]  # Very high similarities
+    very_low_neg = [-10.0, -10.0]  # Very low similarities
+    
+    pos_term, neg_term, log_ratio = contrastive_components(very_high_pos, very_low_neg)
+    
+    assert pos_term > neg_term
+    assert log_ratio > 0
+
+
+class TestScoreFormulaeEdgeCases:
+    """Edge case tests for score formulae functions to improve coverage."""
+    
+    def test_aggregation_functions_empty_arrays(self):
+        """Test aggregation functions with empty arrays."""
+        empty_array = np.array([])
+        
+        # Test mean_of_positives with empty array (line 98)
+        result = mean_of_positives(empty_array)
+        assert result == 0.0
+        
+        # Test top_k_mean with empty array (line 119)
+        result = top_k_mean(empty_array, k=3)
+        assert result == 0.0
+        
+        # Test top_k_mean with k larger than array size (line 122)
+        small_array = np.array([0.5])
+        result = top_k_mean(small_array, k=3)
+        assert np.isclose(result, 0.5)
+        
+        # Test percentile_score with empty array (line 139)
+        result = percentile_score(empty_array, q=50)
+        assert result == 0.0
+        
+        # Test percentile_score with all negative values (line 142)
+        negative_array = np.array([-1.0, -0.5, -2.0])
+        result = percentile_score(negative_array, q=75)
+        assert result == 0.0
+        
+        # Test skewness with empty array (line 155)
+        result = skewness(empty_array)
+        assert np.isclose(result, 0.0)
+        
+        # Test skewness with single value (line 158)
+        single_value = np.array([0.5])
+        result = skewness(single_value)
+        assert np.isclose(result, 0.0)
+        
+        # Test softmax_weighted_mean with empty array
+        result = softmax_weighted_mean(empty_array)
+        assert result == 0.0
+        
+        # Test max_score with empty array
+        result = max_score(empty_array)
+        assert result == 0.0

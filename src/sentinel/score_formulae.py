@@ -12,7 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Score calculation functions for Sentinel index."""
+"""Score calculation functions for Sentinel index.
+
+This module contains per-observation scoring utilities (contrastive scoring)
+and aggregation functions to combine multiple observation scores into a single
+affinity number. In addition to the default skewness, a set of robust
+alternatives are provided to fit different deployment preferences (recall vs precision,
+stability vs sensitivity, etc.).
+"""
 
 import numpy as np
 from typing import List, Callable
@@ -34,7 +41,12 @@ def mean_of_positives(scores: np.array) -> float:
     Returns:
         Mean of positive scores, indicating overall affinity to rare class content
     """
-    return np.mean(scores[scores > 0])
+    if scores.size == 0:
+        return 0.0
+    positives = scores[scores > 0]
+    if positives.size == 0:
+        return 0.0
+    return float(np.mean(positives))
 
 
 def skewness(scores: np.array, min_size_of_scores: int = 10) -> float:
@@ -70,6 +82,117 @@ def skewness(scores: np.array, min_size_of_scores: int = 10) -> float:
     return (mean - median) / std
 
 
+def top_k_mean(scores: np.array, k: int = 3) -> float:
+    """Mean of the top-k positive scores.
+
+    Focuses on the strongest signals while ignoring noise and negatives.
+
+    Args:
+        scores: Array of observation scores.
+        k: Number of highest positive scores to average.
+
+    Returns:
+        Mean of the top-k positive scores (0.0 if no positive scores).
+    """
+    if scores.size == 0:
+        return 0.0
+    positives = scores[scores > 0]
+    if positives.size == 0:
+        return 0.0
+    k = min(k, positives.size)
+    # Use partition for efficiency, then mean of the largest k
+    idx = np.argpartition(positives, -k)[-k:]
+    return float(np.mean(positives[idx]))
+
+
+def percentile_score(scores: np.array, q: float = 90.0) -> float:
+    """Return the q-th percentile among positive scores (robust to outliers).
+
+    Args:
+        scores: Array of observation scores.
+        q: Percentile in [0, 100].
+
+    Returns:
+        q-th percentile of positive scores (0.0 if no positive scores).
+    """
+    if scores.size == 0:
+        return 0.0
+    positives = scores[scores > 0]
+    if positives.size == 0:
+        return 0.0
+    return float(np.percentile(positives, q))
+
+
+def softmax_weighted_mean(scores: np.array, temperature: float = 1.0) -> float:
+    """Softmax-weighted mean over positive scores.
+
+    Emphasizes higher scores while keeping some contribution from smaller ones.
+
+    Args:
+        scores: Array of observation scores.
+        temperature: Softmax temperature (>0). Lower values emphasize peaks more.
+
+    Returns:
+        Softmax-weighted average of positive scores (0.0 if no positive scores).
+    """
+    if scores.size == 0:
+        return 0.0
+    positives = scores[scores > 0]
+    if positives.size == 0:
+        return 0.0
+    t = max(1e-6, float(temperature))
+    x = positives / t
+    # Numerical stability
+    x = x - np.max(x)
+    w = np.exp(x)
+    w = w / np.sum(w)
+    return float(np.sum(w * positives))
+
+
+def max_score(scores: np.array) -> float:
+    """Maximum positive score (simple, sensitive, and easy to interpret)."""
+    if scores.size == 0:
+        return 0.0
+    positives = scores[scores > 0]
+    if positives.size == 0:
+        return 0.0
+    return float(np.max(positives))
+
+
+def contrastive_components(
+    similarities_topk_pos: List[float],
+    similarities_topk_neg: List[float],
+    aggregation_fn: Callable[[np.array], float] = np.mean,
+):
+    """Return contrastive components and final log-ratio for a single observation.
+
+    Computes the positive and negative terms used by the contrastive score and
+    the unclipped log ratio. Useful for explainability.
+
+    Returns:
+        (positives_term, negatives_term, log_ratio)
+    """
+    if len(similarities_topk_pos) <= 0 or len(similarities_topk_neg) <= 0:
+        raise ValueError(
+            "The lists of similarities must have at least one element each."
+        )
+
+    similarities_topk_pos = np.array(similarities_topk_pos)
+    similarities_topk_neg = np.array(similarities_topk_neg)
+
+    positives_term = aggregation_fn(np.exp(similarities_topk_pos))
+    negatives_term = aggregation_fn(np.exp(similarities_topk_neg))
+
+    # Avoid divide-by-zero (shouldn’t happen with exp, but be safe)
+    if negatives_term == 0:
+        log_ratio = np.inf
+    else:
+        ratio = positives_term / negatives_term
+        log_ratio = np.log(ratio)
+
+    return float(positives_term), float(negatives_term), float(log_ratio)
+
+
 def calculate_contrastive_score(
     similarities_topk_pos: List[float],
     similarities_topk_neg: List[float],
@@ -94,19 +217,10 @@ def calculate_contrastive_score(
     Returns:
         A contrastive score where values > 0 indicate closer similarity to rare class content
     """
-    if len(similarities_topk_pos) <= 0 or len(similarities_topk_neg) <= 0:
-        raise ValueError(
-            "The lists of similarities must have at least one element each."
-        )
-
-    similarities_topk_pos = np.array(similarities_topk_pos)
-    similarities_topk_neg = np.array(similarities_topk_neg)
-
-    positives_term = aggregation_fn(np.exp(similarities_topk_pos))
-    negatives_term = aggregation_fn(np.exp(similarities_topk_neg))
-
-    contrastive_score = positives_term / negatives_term
-
-    if contrastive_score <= 1.0:
-        return 0  # Clip to zero to avoid negative scores, since we accumulate this score for all chat lines of a user.
-    return np.log(contrastive_score)
+    positives_term, negatives_term, log_ratio = contrastive_components(
+        similarities_topk_pos, similarities_topk_neg, aggregation_fn
+    )
+    # Clip to zero to avoid negative scores, since we accumulate this score for all chat lines of a user.
+    if log_ratio <= 0.0:
+        return 0.0
+    return float(log_ratio)
