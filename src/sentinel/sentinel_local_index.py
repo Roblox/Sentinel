@@ -176,7 +176,7 @@ class SentinelLocalIndex:
         aws_access_key_id: Optional[str] = None,
         aws_secret_access_key: Optional[str] = None,
         negative_to_positive_ratio: Optional[float] = 5.0,
-        cache_Model: bool = False,
+        cache_model: bool = False,
     ) -> "SentinelLocalIndex":
         """
         Load the index from a path and returns a new SentinelLocalIndex instance.
@@ -189,7 +189,7 @@ class SentinelLocalIndex:
                                       If None, preserves the original ratio from the saved index.
                                       If 5.0 (default), uses a 5:1 negative to positive ratio for optimal performance.
                                       If specified, downsamples negative examples to achieve the desired ratio.
-            cache_Model: Whether to use model caching for faster subsequent loads. Default True.
+            cache_model: Whether to use model caching for faster subsequent loads. Default True.
 
         Returns:
             A new SentinelLocalIndex instance with the loaded model and embeddings.
@@ -209,7 +209,7 @@ class SentinelLocalIndex:
 
         sentence_model, scale_fn = get_sentence_transformer_and_scaling_fn(
             model_name,
-            use_cache = cache_Model
+            use_cache = cache_model
             )
 
         # Create a new instance with the loaded model and data
