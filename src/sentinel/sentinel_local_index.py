@@ -176,7 +176,7 @@ class SentinelLocalIndex:
         aws_access_key_id: Optional[str] = None,
         aws_secret_access_key: Optional[str] = None,
         negative_to_positive_ratio: Optional[float] = 5.0,
-        Cache_Model: bool = False,
+        cache_Model: bool = False,
     ) -> "SentinelLocalIndex":
         """
         Load the index from a path and returns a new SentinelLocalIndex instance.
@@ -189,7 +189,7 @@ class SentinelLocalIndex:
                                       If None, preserves the original ratio from the saved index.
                                       If 5.0 (default), uses a 5:1 negative to positive ratio for optimal performance.
                                       If specified, downsamples negative examples to achieve the desired ratio.
-            Cache_Model: Whether to use model caching for faster subsequent loads. Default True.
+            cache_Model: Whether to use model caching for faster subsequent loads. Default True.
 
         Returns:
             A new SentinelLocalIndex instance with the loaded model and embeddings.
@@ -209,7 +209,7 @@ class SentinelLocalIndex:
 
         sentence_model, scale_fn = get_sentence_transformer_and_scaling_fn(
             model_name,
-            use_cache = Cache_Model
+            use_cache = cache_Model
             )
 
         # Create a new instance with the loaded model and data
@@ -307,9 +307,12 @@ class SentinelLocalIndex:
         # Margin to ignore when text is only slightly more similar to positive than negative.
         min_score_to_consider: float = 0.1,
         # Use when simulating by sampling texts from the same data indexed.
-    prevent_exact_match: bool = False,
-    encoding_additional_kwargs: Mapping[str, Any] = {},
-    show_progress_bar: bool = False,
+        prevent_exact_match: bool = False,
+        encoding_additional_kwargs: Mapping[str, Any] = {},
+        show_progress_bar: bool = False,
+        explain: bool = True,
+        include_neighbors: bool = True,
+        neighbors_limit: int = 5,
     ) -> RareClassAffinityResult:
         """Calculate rare class affinity for the given text samples in realtime.
 
@@ -330,6 +333,9 @@ class SentinelLocalIndex:
             prevent_exact_match: Whether to skip exact matches when scoring.
             encoding_additional_kwargs: Additional keyword arguments for encoding.
             show_progress_bar: Whether to display a progress bar during encoding.
+            explain: Whether to include per-text explainability details.
+            include_neighbors: Whether to include top-neighbor records in explainability output.
+            neighbors_limit: Maximum number of neighbor records to include per text.
 
         Returns:
             RareClassAffinityResult containing both the overall affinity score and
@@ -365,11 +371,6 @@ class SentinelLocalIndex:
             self.negative_embeddings,
             top_k=top_k + additional_neighbors,
         )
-
-        # Explainability defaults (always on for transparency)
-        explain = True
-        include_neighbors = True
-        neighbors_limit = 5
 
         observation_scores = {}
         explanations = {} if explain else None
