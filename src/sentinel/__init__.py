@@ -19,6 +19,23 @@ This library provides tools for semantic scoring of text based on contrastive le
 """
 
 from sentinel.sentinel_local_index import SentinelLocalIndex
-from sentinel.score_formulae import calculate_contrastive_score
+from sentinel.score_formulae import (
+	calculate_contrastive_score,
+	skewness,
+	mean_of_positives,
+	top_k_mean,
+	percentile_score,
+	softmax_weighted_mean,
+	max_score,
+)
 
-__all__ = ["SentinelLocalIndex", "calculate_contrastive_score"]
+__all__ = [
+	"SentinelLocalIndex",
+	"calculate_contrastive_score",
+	"skewness",
+	"mean_of_positives",
+	"top_k_mean",
+	"percentile_score",
+	"softmax_weighted_mean",
+	"max_score",
+]

@@ -48,13 +48,14 @@ pytest-timeout = "^2.4.0"
 [tool.poetry.group.docs.dependencies]
 furo = "^2024.8.6"
 sphinx-copybutton = "^0.5.2"
+sphinx = ">=7.0.0,<8.0.0"
 
 [tool.poetry.group.examples.dependencies]
 datasets = "^2.14.0"
 jupyter = "^1.0.0"
 ipykernel = "^6.0.0"
 matplotlib = "^3.0.0"
-pandas = "^1.0.0"
+pandas = "^2.0.0"
 beautifulsoup4 = "^4.10.0"
 markdownify = "^0.11.0"
 python-slugify = "^8.0.0"

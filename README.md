@@ -11,6 +11,22 @@ Roblox Sentinel, part of the Roblox Safety Toolkit, is a Python library designed
 
 By prioritizing recall over precision, Sentinel serves as a high-recall candidate generator for more thorough investigation. This approach is particularly effective for applications where rare patterns are critical to identify. Rather than treating each message in isolation, Sentinel analyzes patterns across messages to identify concerning behavior.
 
+## What’s New: Aggregation options and Explainability
+
+Sentinel now includes multiple aggregation strategies and built‑in explainability to help you tune for your use case and understand why a score was assigned.
+
+- Aggregators (in `sentinel.score_formulae`):
+    - `skewness(scores, min_size_of_scores=10)`: default, pattern‑oriented and robust to message count
+    - `top_k_mean(scores, k=3)`: focuses on the strongest signals
+    - `percentile_score(scores, q=90.0)`: robust to outliers via a percentile over positives
+    - `softmax_weighted_mean(scores, temperature=1.0)`: smoothly emphasizes higher scores
+    - `max_score(scores)`: simplest, picks the highest positive score
+
+- Explainability (in results):
+    - Each call to `calculate_rare_class_affinity` returns a `RareClassAffinityResult` with:
+        - `aggregation_name`, `aggregation_stats`: which aggregator was used and key params
+        - `explanations`: per‑text details including top‑K positive/negative similarities, contrastive components, and neighbor snippets (when available)
+
 ## Terminology
 
 In Sentinel's codebase:
@@ -65,6 +81,16 @@ print(f"Overall rare class affinity score: {overall_score:.4f}")
 for message, score in result.observation_scores.items():
     risk_level = "High" if score > 0.5 else "Medium" if score > 0.1 else "Low"
     print(f"'{message}' - Score: {score:.4f} - Risk: {risk_level}")
+
+# Inspect explainability
+print("Aggregator:", result.aggregation_name)
+print("Aggregation stats:", result.aggregation_stats)
+for message, ex in result.explanations.items():
+    print("--", message)
+    print("   topk_positive:", ex["topk_positive"])  # scaled similarities
+    print("   topk_negative:", ex["topk_negative"])  # scaled similarities
+    print("   contrastive:", ex["contrastive"])      # positive_term, negative_term, log_ratio_unclipped
+    print("   neighbors (sample):", ex["neighbors"][:2] if ex["neighbors"] else None)
 ```
 
 ## Creating a New Index
@@ -109,6 +135,37 @@ saved_config = index.save(
     aws_access_key_id="YOUR_ACCESS_KEY_ID",  # Optional if using environment credentials
     aws_secret_access_key="YOUR_SECRET_ACCESS_KEY"  # Optional if using environment credentials
 )
+
+## Testing for optimal Thresholds and data ratio's
+
+Usage of the 'examples\Example_Threshold_Script.py' script will allow for quick threshold checks for a variety of ratios, by default these are 10:1, 5:1 and 1:1 ratios. This has predefined example chat logs, and should, show optimal settings for the dataset being used based on an average score and average detection count.
+You will be able to get detailed information output in the ratios with the -r or --review flags.
+
+## Choosing an aggregation strategy
+
+Different deployments optimize for different trade‑offs. You can swap in any aggregator using the `aggregation_function` argument:
+
+```python
+from sentinel.score_formulae import top_k_mean, percentile_score, softmax_weighted_mean, max_score
+
+texts = ["msg a", "msg b", "msg c"]
+
+# Focus on the strongest few signals
+res1 = index.calculate_rare_class_affinity(texts, aggregation_function=lambda arr: top_k_mean(arr, k=3))
+
+# Robust to outliers
+res2 = index.calculate_rare_class_affinity(texts, aggregation_function=lambda arr: percentile_score(arr, q=90))
+
+# Smoothly emphasize higher scores
+res3 = index.calculate_rare_class_affinity(texts, aggregation_function=lambda arr: softmax_weighted_mean(arr, temperature=0.5))
+
+# Simplest, picks the maximum
+res4 = index.calculate_rare_class_affinity(texts, aggregation_function=max_score)
+```
+
+Notes:
+- All aggregators operate over per‑observation scores where non‑confident observations are already clipped to 0.
+- The default `skewness` remains a good choice when user activity volume varies widely.
 ```
 
 ## How It Works

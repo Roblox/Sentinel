@@ -15,11 +15,20 @@
 """Shared test fixtures and configurations for Sentinel tests."""
 
 import os
+import sys
+import pathlib
 import pytest
 import numpy as np
 import torch
 import logging
 from unittest.mock import MagicMock
+
+
+# Ensure the package under src/ is importable without installation
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
+_SRC_PATH = _REPO_ROOT / "src"
+if str(_SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(_SRC_PATH))
 
 
 # Set up logging for tests

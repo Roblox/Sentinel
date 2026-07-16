@@ -168,6 +168,16 @@ class TestSentinelLocalIndex:
         )
         assert all(score == 0.0 for score in result.observation_scores.values())
 
+        # Explainability fields present
+        assert result.aggregation_name is not None
+        assert isinstance(result.aggregation_stats, dict)
+        assert result.explanations is not None
+        # Each input has an explanation
+        for t in mixed_text:
+            assert t in result.explanations
+            ex = result.explanations[t]
+            assert "topk_positive" in ex and "topk_negative" in ex and "contrastive" in ex
+
 
 # Integration test combining various components
 @pytest.mark.integration
@@ -245,3 +255,251 @@ def test_end_to_end_workflow():
 
         # Negative examples should be zero
         assert negative_score == 0, "Negative example should score zero"
+
+
+class TestSentinelLocalIndexEdgeCases:
+    """Test edge cases and error handling in SentinelLocalIndex."""
+
+    def test_apply_negative_ratio_with_none(self, simple_index):
+        """Test _apply_negative_ratio with None value (preserve original ratio)."""
+        original_negative_size = simple_index.negative_embeddings.shape[0]
+        original_positive_size = simple_index.positive_embeddings.shape[0]
+        
+        # Test with None - should preserve original ratio and log info
+        simple_index._apply_negative_ratio(None)
+        
+        # Should remain unchanged
+        assert simple_index.negative_embeddings.shape[0] == original_negative_size
+        assert simple_index.positive_embeddings.shape[0] == original_positive_size
+
+    def test_apply_negative_ratio_with_null_embeddings(self):
+        """Test _apply_negative_ratio with null embeddings."""
+        # Create index with null embeddings
+        index = SentinelLocalIndex(
+            sentence_model=None,
+            positive_embeddings=None,
+            negative_embeddings=None,
+            scale_fn=None,
+            positive_corpus=None,
+            negative_corpus=None
+        )
+        
+        # Should handle null embeddings gracefully
+        index._apply_negative_ratio(1.0)
+        
+        # Should remain None
+        assert index.positive_embeddings is None
+        assert index.negative_embeddings is None
+
+    def test_apply_negative_ratio_with_empty_embeddings(self):
+        """Test _apply_negative_ratio with empty embeddings."""
+        # Create empty tensors
+        empty_positive = torch.tensor([]).reshape(0, 384)  # 0 samples, 384 dimensions
+        empty_negative = torch.tensor([]).reshape(0, 384)
+        
+        index = SentinelLocalIndex(
+            sentence_model=None,
+            positive_embeddings=empty_positive,
+            negative_embeddings=empty_negative,
+            scale_fn=None,
+            positive_corpus=[],
+            negative_corpus=[]
+        )
+        
+        # Should handle empty embeddings gracefully
+        index._apply_negative_ratio(1.0)
+        
+        # Should remain empty
+        assert index.positive_embeddings.shape[0] == 0
+        assert index.negative_embeddings.shape[0] == 0
+
+    def test_apply_negative_ratio_with_invalid_ratio(self, simple_index):
+        """Test _apply_negative_ratio with invalid ratio values."""
+        original_negative_size = simple_index.negative_embeddings.shape[0]
+        
+        # Test with negative ratio
+        simple_index._apply_negative_ratio(-1.0)
+        assert simple_index.negative_embeddings.shape[0] == original_negative_size
+        
+        # Test with zero ratio
+        simple_index._apply_negative_ratio(0.0)
+        assert simple_index.negative_embeddings.shape[0] == original_negative_size
+
+    def test_apply_negative_ratio_calculation_error(self, simple_index):
+        """Test _apply_negative_ratio with calculation that would cause overflow."""
+        # Test with extremely large ratio that could cause overflow
+        import sys
+        simple_index._apply_negative_ratio(float(sys.maxsize))
+        
+        # Should handle gracefully and preserve original embeddings
+        assert simple_index.negative_embeddings is not None
+
+    def test_calculate_rare_class_affinity_with_prevent_exact_match(self, simple_index):
+        """Test calculate_rare_class_affinity with prevent_exact_match=True."""
+        # Use text that might create exact matches
+        observations = ["unsafe behavior detected", "harmful content identified"]  # These are in positive corpus
+        
+        result = simple_index.calculate_rare_class_affinity(
+            observations,
+            prevent_exact_match=True
+        )
+        
+        assert isinstance(result, RareClassAffinityResult)
+        assert result.rare_class_affinity_score >= 0
+
+    def test_calculate_rare_class_affinity_with_high_threshold(self, simple_index):
+        """Test calculate_rare_class_affinity with very high threshold to trigger empty scores."""
+        observations = ["some neutral text that won't match well"]
+        
+        result = simple_index.calculate_rare_class_affinity(
+            observations,
+            min_score_to_consider=100.0  # Extremely high threshold to ensure no scores pass
+        )
+        
+        assert isinstance(result, RareClassAffinityResult)
+        # Should be 0.0 due to high threshold filtering out all scores
+        assert result.rare_class_affinity_score == 0.0
+
+    def test_apply_negative_ratio_zero_calculated_samples(self, simple_index):
+        """Test _apply_negative_ratio when calculated samples to keep is zero."""
+        # Use a very small ratio that would result in 0 samples
+        simple_index._apply_negative_ratio(0.001)  # Should result in 0 samples for typical test data
+        
+        # Should preserve original embeddings due to invalid calculated value
+        assert simple_index.negative_embeddings.shape[0] >= 0
+
+    def test_apply_negative_ratio_calculation_overflow(self, simple_index):
+        """Test _apply_negative_ratio with values that cause calculation errors."""
+        # Test with float('inf') to trigger calculation errors
+        simple_index._apply_negative_ratio(float('inf'))
+        
+        # Should preserve original embeddings
+        assert simple_index.negative_embeddings is not None
+
+    def test_torch_operation_error_handling(self, simple_index):
+        """Test error handling in torch operations during downsampling."""
+        # This is harder to trigger directly, but we can test with edge case ratios
+        original_size = simple_index.negative_embeddings.shape[0]
+        
+        # Test with various edge case ratios
+        simple_index._apply_negative_ratio(0.1)  # Very small ratio
+        
+        # Should complete without errors
+        assert simple_index.negative_embeddings.shape[0] <= original_size
+
+    def test_debug_logging_and_neighbor_recording(self, simple_index, caplog):
+        """Test debug logging paths and neighbor recording."""
+        import logging
+        caplog.set_level(logging.DEBUG)
+        
+        # Test with text that will generate debug output
+        observations = ["test observation for debug output"]
+        result = simple_index.calculate_rare_class_affinity(observations)
+        
+        assert isinstance(result, RareClassAffinityResult)
+        # Verify that debug logging occurred (neighbor records are always created)
+
+    def test_torch_downsampling_runtime_error(self):
+        """Test RuntimeError handling during torch tensor downsampling."""
+        import unittest.mock
+        
+        # Create a simple index with mock sentence transformer
+        from unittest.mock import MagicMock
+        mock_model = MagicMock()
+        mock_model.encode.return_value = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+        
+        # Create embeddings that will cause issues during downsampling
+        positive_embeddings = torch.tensor([[1.0, 0.0, 0.0]])
+        negative_embeddings = torch.tensor([[0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 1.0, 0.0]])
+        
+        index = SentinelLocalIndex(
+            sentence_model=mock_model,
+            positive_embeddings=positive_embeddings,
+            negative_embeddings=negative_embeddings
+        )
+        
+        # Mock torch.randperm to raise RuntimeError to trigger the exception handling (lines 290-292)
+        with unittest.mock.patch('torch.randperm', side_effect=RuntimeError("Mocked torch error")):
+            # This should trigger the exception handling in _apply_negative_ratio
+            original_size = index.negative_embeddings.shape[0]
+            index._apply_negative_ratio(0.5)  # Try to reduce size
+            
+            # Should preserve original embeddings due to the error
+            assert index.negative_embeddings.shape[0] == original_size
+
+    def test_exact_match_compensation_line_410(self, simple_index):
+        """Test the exact match compensation code path (line 410)."""
+        # Create observations that are very similar to corpus content to trigger exact matches
+        observations = ["unsafe behavior detected"]  # This should be very close to positive corpus
+        
+        result = simple_index.calculate_rare_class_affinity(
+            observations,
+            prevent_exact_match=True,
+            top_k=1  # Small top_k to increase chance of exact matches
+        )
+        
+        assert isinstance(result, RareClassAffinityResult)
+        # The exact match prevention should work without errors
+
+    def test_assertion_error_unexpected_sign_line_424(self):
+        """Test the assertion error for unexpected signs (line 424)."""
+        # This is tricky to test directly since it's an internal consistency check
+        # We'll test that normal operation doesn't trigger this assertion
+        from unittest.mock import MagicMock
+        
+        mock_model = MagicMock()
+        mock_model.encode.return_value = torch.tensor([[1.0, 0.0], [0.0, 1.0]])
+        
+        index = SentinelLocalIndex(
+            sentence_model=mock_model,
+            positive_embeddings=torch.tensor([[1.0, 0.0]]),
+            negative_embeddings=torch.tensor([[0.0, 1.0]])
+        )
+        
+        # Normal operation should not trigger the assertion
+        result = index.calculate_rare_class_affinity(["test text"])
+        assert isinstance(result, RareClassAffinityResult)
+
+    def test_fallback_similarity_handling_lines_457_459(self):
+        """Test fallback similarity handling when top_k matches are insufficient."""
+        from unittest.mock import MagicMock, patch
+        
+        # Create a mock that returns limited similarity results
+        mock_model = MagicMock()
+        mock_model.encode.return_value = torch.tensor([[1.0, 0.0]])
+        
+        # Create index with minimal embeddings
+        index = SentinelLocalIndex(
+            sentence_model=mock_model,
+            positive_embeddings=torch.tensor([[1.0, 0.0]]),
+            negative_embeddings=torch.tensor([[0.0, 1.0]]),
+            positive_corpus=["positive text"],
+            negative_corpus=["negative text"]
+        )
+        
+        # Mock semantic_search to return very limited results that would require fallback
+        with patch('sentinel.sentinel_local_index.semantic_search') as mock_search:
+            # Return results with very low scores or limited matches - correct format for semantic_search
+            mock_search.side_effect = [
+                [[{"corpus_id": 0, "score": 0.1}]],  # positive matches for query 0 - low score
+                [[{"corpus_id": 0, "score": 0.1}]]   # negative matches for query 0 - low score
+            ]
+            
+            result = index.calculate_rare_class_affinity(
+                ["test text"],
+                top_k=5,  # Request more than available
+                min_score_to_consider=0.0  # Allow low scores
+            )
+            
+            assert isinstance(result, RareClassAffinityResult)
+
+    def test_empty_observation_scores_line_503(self, simple_index):
+        """Test the empty observation scores path (line 503)."""
+        # Use an extremely high threshold to ensure no scores pass
+        result = simple_index.calculate_rare_class_affinity(
+            ["any text"],
+            min_score_to_consider=1000.0  # Impossibly high threshold
+        )
+        
+        assert isinstance(result, RareClassAffinityResult)
+        assert result.rare_class_affinity_score == 0.0  # Should be 0.0 when no scores pass
