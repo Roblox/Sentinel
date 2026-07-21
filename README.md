@@ -55,15 +55,33 @@ same way on any machine that has [Docker](https://docs.docker.com/get-docker/).
 
 ### 1. Build the image
 
-From the repository root (the folder containing the `Dockerfile`):
+There are two Dockerfiles so you can pick the one that fits your needs:
+
+| File | torch build | Approx. image size | Use when |
+|------|-------------|--------------------|----------|
+| `Dockerfile` (default) | GPU (CUDA) | ~6–8 GB | You want to run on a GPU, or want the fully pinned (`poetry.lock`) install |
+| `Dockerfile.cpu` | CPU-only | ~1.5–2.5 GB | You just need CPU inference (the common case) — much smaller and faster to pull |
+
+Sentinel's own code runs on CPU, so for most people `Dockerfile.cpu` is the
+better choice. The default `Dockerfile` pulls in the full NVIDIA CUDA libraries
+(several GB) that are only useful if you actually have a GPU.
+
+From the repository root, build whichever you want:
 
 ```bash
+# Default (GPU-capable) image, tagged "sentinel"
 docker build -t sentinel .
+
+# Smaller CPU-only image, tagged "sentinel:cpu"
+docker build -f Dockerfile.cpu -t sentinel:cpu .
 ```
 
-This installs the `sentinel` library together with the `sbert` extra
+Both install the `sentinel` library together with the `sbert` extra
 (sentence-transformers + torch). The first build downloads a lot of
 dependencies, so it can take several minutes.
+
+> The examples below use the `sentinel` tag. If you built the CPU image, just
+> swap in `sentinel:cpu` (e.g. `docker run --rm sentinel:cpu`).
 
 ### 2. Run the demo
 

@@ -1,8 +1,13 @@
-# Sentinel container image.
+# Sentinel container image (default / GPU-capable variant).
 #
 # Builds a self-contained image that installs the `sentinel` library (with the
 # optional `sbert` extra, which pulls in sentence-transformers + torch) and, by
 # default, runs the beginner demo so you can see the full scoring flow.
+#
+# This variant installs the default torch build, which on Linux is GPU (CUDA)
+# enabled and therefore large (~6-8 GB total image). Sentinel itself runs on
+# CPU; if you don't need GPU, use `Dockerfile.cpu` for a much smaller image:
+#   docker build -f Dockerfile.cpu -t sentinel:cpu .
 FROM python:3.11-slim
 
 # - PYTHONUNBUFFERED: print logs immediately instead of buffering them.
