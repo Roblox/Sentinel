@@ -193,6 +193,7 @@ saved_config = index.save(
     aws_access_key_id="YOUR_ACCESS_KEY_ID",  # Optional if using environment credentials
     aws_secret_access_key="YOUR_SECRET_ACCESS_KEY"  # Optional if using environment credentials
 )
+```
 
 ## Testing for optimal Thresholds and data ratio's
 
@@ -224,7 +225,6 @@ res4 = index.calculate_rare_class_affinity(texts, aggregation_function=max_score
 Notes:
 - All aggregators operate over per‑observation scores where non‑confident observations are already clipped to 0.
 - The default `skewness` remains a good choice when user activity volume varies widely.
-```
 
 ## How It Works
 
