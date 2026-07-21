@@ -46,6 +46,64 @@ To pull them in as well, use:
 pip install '.[sbert]'
 ```
 
+## Run with Docker
+
+If you'd rather not set up Python and Poetry locally, you can run Sentinel in a
+container. A container is just an isolated, pre-configured "box" that already
+has the right Python version and all dependencies installed, so it runs the
+same way on any machine that has [Docker](https://docs.docker.com/get-docker/).
+
+### 1. Build the image
+
+From the repository root (the folder containing the `Dockerfile`):
+
+```bash
+docker build -t sentinel .
+```
+
+This installs the `sentinel` library together with the `sbert` extra
+(sentence-transformers + torch). The first build downloads a lot of
+dependencies, so it can take several minutes.
+
+### 2. Run the demo
+
+```bash
+docker run --rm sentinel
+```
+
+This runs `examples/beginner_demo.py`, which builds a tiny in-memory index and
+scores a batch of example messages. On the first run it downloads the
+`all-MiniLM-L6-v2` embedding model, so give it a moment.
+
+To avoid re-downloading that model on every run, mount a local folder as the
+model cache:
+
+```bash
+docker run --rm -v "$(pwd)/.hf-cache:/home/sentinel/.cache/huggingface" sentinel
+```
+
+### 3. Run your own script
+
+The default command is just a starting point. Override it to run any other
+script in the image — for example the threshold tuning script:
+
+```bash
+docker run --rm sentinel python examples/Example_Threshold_Script.py
+```
+
+Or drop into an interactive shell to explore:
+
+```bash
+docker run --rm -it sentinel bash
+```
+
+To run a script from your own machine (not baked into the image), mount your
+current directory into the container's `/app` folder:
+
+```bash
+docker run --rm -v "$(pwd):/app" sentinel python your_script.py
+```
+
 ## Quick Start
 
 ```python
