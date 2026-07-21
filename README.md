@@ -46,6 +46,92 @@ To pull them in as well, use:
 pip install '.[sbert]'
 ```
 
+## Run with Docker
+
+If you'd rather not set up Python and Poetry locally, you can run Sentinel in a
+container. A container is just an isolated, pre-configured "box" that already
+has the right Python version and all dependencies installed, so it runs the
+same way on any machine that has [Docker](https://docs.docker.com/get-docker/).
+
+### 1. Build the image
+
+There are two Dockerfiles so you can pick the one that fits your needs:
+
+| File | torch build | Approx. image size | Use when |
+|------|-------------|--------------------|----------|
+| `Dockerfile` (default) | GPU (CUDA) on x86_64 Linux; CPU on arm64 | ~6–8 GB on x86_64 Linux; ~1 GB on arm64 | You want to run on a GPU, or want the fully pinned (`poetry.lock`) install |
+| `Dockerfile.cpu` | CPU-only (all architectures) | ~1.5–2.5 GB | You just need CPU inference (the common case) — much smaller and faster to pull |
+
+> **Note on image size and architecture.** The sizes above assume you build on
+> an **x86_64 (amd64) Linux** host. The default `Dockerfile` only pulls in the
+> full NVIDIA CUDA libraries (several GB) there, because `poetry.lock` marks
+> those packages as x86_64-Linux-only. If you build on **Apple Silicon (arm64)**
+> — e.g. an M-series Mac — Docker produces an arm64 image, the CUDA packages are
+> skipped, and the default image is CPU-only and much smaller (~1 GB). In that
+> case both Dockerfiles end up CPU-only and similar in size. `Dockerfile.cpu`
+> installs the CPU build of torch explicitly, so it is guaranteed CPU-only on
+> **every** architecture (including x86_64 Linux).
+
+Sentinel's own code runs on CPU, so for most people `Dockerfile.cpu` is the
+better choice. On x86_64 Linux the default `Dockerfile` pulls in the full NVIDIA
+CUDA libraries (several GB) that are only useful if you actually have a GPU.
+
+From the repository root, build whichever you want:
+
+```bash
+# Default (GPU-capable) image, tagged "sentinel"
+docker build -t sentinel .
+
+# Smaller CPU-only image, tagged "sentinel:cpu"
+docker build -f Dockerfile.cpu -t sentinel:cpu .
+```
+
+Both install the `sentinel` library together with the `sbert` extra
+(sentence-transformers + torch). The first build downloads a lot of
+dependencies, so it can take several minutes.
+
+> The examples below use the `sentinel` tag. If you built the CPU image, just
+> swap in `sentinel:cpu` (e.g. `docker run --rm sentinel:cpu`).
+
+### 2. Run the demo
+
+```bash
+docker run --rm sentinel
+```
+
+This runs `examples/beginner_demo.py`, which builds a tiny in-memory index and
+scores a batch of example messages. On the first run it downloads the
+`all-MiniLM-L6-v2` embedding model, so give it a moment.
+
+To avoid re-downloading that model on every run, mount a local folder as the
+model cache:
+
+```bash
+docker run --rm -v "$(pwd)/.hf-cache:/home/sentinel/.cache/huggingface" sentinel
+```
+
+### 3. Run your own script
+
+The default command is just a starting point. Override it to run any other
+script in the image — for example the threshold tuning script:
+
+```bash
+docker run --rm sentinel python examples/Example_Threshold_Script.py
+```
+
+Or drop into an interactive shell to explore:
+
+```bash
+docker run --rm -it sentinel bash
+```
+
+To run a script from your own machine (not baked into the image), mount your
+current directory into the container's `/app` folder:
+
+```bash
+docker run --rm -v "$(pwd):/app" sentinel python your_script.py
+```
+
 ## Quick Start
 
 ```python
@@ -135,6 +221,7 @@ saved_config = index.save(
     aws_access_key_id="YOUR_ACCESS_KEY_ID",  # Optional if using environment credentials
     aws_secret_access_key="YOUR_SECRET_ACCESS_KEY"  # Optional if using environment credentials
 )
+```
 
 ## Testing for optimal Thresholds and data ratio's
 
@@ -166,7 +253,6 @@ res4 = index.calculate_rare_class_affinity(texts, aggregation_function=max_score
 Notes:
 - All aggregators operate over per‑observation scores where non‑confident observations are already clipped to 0.
 - The default `skewness` remains a good choice when user activity volume varies widely.
-```
 
 ## How It Works
 
