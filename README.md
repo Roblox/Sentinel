@@ -59,12 +59,22 @@ There are two Dockerfiles so you can pick the one that fits your needs:
 
 | File | torch build | Approx. image size | Use when |
 |------|-------------|--------------------|----------|
-| `Dockerfile` (default) | GPU (CUDA) | ~6–8 GB | You want to run on a GPU, or want the fully pinned (`poetry.lock`) install |
-| `Dockerfile.cpu` | CPU-only | ~1.5–2.5 GB | You just need CPU inference (the common case) — much smaller and faster to pull |
+| `Dockerfile` (default) | GPU (CUDA) on x86_64 Linux; CPU on arm64 | ~6–8 GB on x86_64 Linux; ~1 GB on arm64 | You want to run on a GPU, or want the fully pinned (`poetry.lock`) install |
+| `Dockerfile.cpu` | CPU-only (all architectures) | ~1.5–2.5 GB | You just need CPU inference (the common case) — much smaller and faster to pull |
+
+> **Note on image size and architecture.** The sizes above assume you build on
+> an **x86_64 (amd64) Linux** host. The default `Dockerfile` only pulls in the
+> full NVIDIA CUDA libraries (several GB) there, because `poetry.lock` marks
+> those packages as x86_64-Linux-only. If you build on **Apple Silicon (arm64)**
+> — e.g. an M-series Mac — Docker produces an arm64 image, the CUDA packages are
+> skipped, and the default image is CPU-only and much smaller (~1 GB). In that
+> case both Dockerfiles end up CPU-only and similar in size. `Dockerfile.cpu`
+> installs the CPU build of torch explicitly, so it is guaranteed CPU-only on
+> **every** architecture (including x86_64 Linux).
 
 Sentinel's own code runs on CPU, so for most people `Dockerfile.cpu` is the
-better choice. The default `Dockerfile` pulls in the full NVIDIA CUDA libraries
-(several GB) that are only useful if you actually have a GPU.
+better choice. On x86_64 Linux the default `Dockerfile` pulls in the full NVIDIA
+CUDA libraries (several GB) that are only useful if you actually have a GPU.
 
 From the repository root, build whichever you want:
 
