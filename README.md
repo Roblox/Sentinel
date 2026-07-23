@@ -254,6 +254,40 @@ Notes:
 - All aggregators operate over per‑observation scores where non‑confident observations are already clipped to 0.
 - The default `skewness` remains a good choice when user activity volume varies widely.
 
+## Simulation-based tuning
+
+Which aggregator and hyperparameters work best depends on your data, so it helps to measure them on labeled examples. The `sentinel.simulation` module is a small, numpy‑only harness for exactly that — no Ray, S3, or experiment trackers required.
+
+Give it groups of observations with known labels (`1` = rare/positive source, `0` = common/negative source), score them once, then compare every aggregator (and hyperparameter) cheaply:
+
+```python
+import pandas as pd
+from sentinel.simulation import LabeledGroup, score_groups, compare_aggregators, run_grid_search
+
+groups = [
+    LabeledGroup(name="source_a", label=1, observations=["...", "..."]),  # known rare-class source
+    LabeledGroup(name="source_b", label=0, observations=["...", "..."]),  # known common-class source
+    # ...
+]
+
+# Expensive step (runs the model) — done once.
+scored = score_groups(index, groups, top_k=5)
+
+# Cheap step — compare all six aggregators on the same scores.
+pd.DataFrame(compare_aggregators(scored))
+
+# Or sweep hyperparameters as well.
+pd.DataFrame(run_grid_search(index, groups, top_k_values=[3, 5, 10], min_score_values=[0.0, 0.1, 0.25]))
+```
+
+Each result row reports three families of evaluation metrics, so you can tune for whatever matters to your use case:
+
+- Ranking: `roc_auc`, `recall_at_n`, `precision_at_n`, `rank_ratio` (do known positives rank at the top?)
+- Threshold / classification: `precision`, `recall`, `f1`, `false_positive_rate` at a chosen (or automatically best‑F1) cutoff
+- Separation / distribution: `mean_separation`, `cohens_d`, `ks_statistic` (threshold‑free)
+
+See [examples/sentinel_against_hate.ipynb](examples/sentinel_against_hate.ipynb) for a worked example comparing aggregators on hate‑speech data.
+
 ## How It Works
 
 Sentinel uses a two-step process to detect rare classes of text, focusing on high recall for realtime applications:

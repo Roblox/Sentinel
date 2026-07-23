@@ -28,6 +28,15 @@ from sentinel.score_formulae import (
 	softmax_weighted_mean,
 	max_score,
 )
+from sentinel.simulation import (
+	DEFAULT_AGGREGATORS,
+	LabeledGroup,
+	GroupObservationScores,
+	score_groups,
+	evaluate_groups,
+	compare_aggregators,
+	run_grid_search,
+)
 
 __all__ = [
 	"SentinelLocalIndex",
@@ -38,4 +47,11 @@ __all__ = [
 	"percentile_score",
 	"softmax_weighted_mean",
 	"max_score",
+	"DEFAULT_AGGREGATORS",
+	"LabeledGroup",
+	"GroupObservationScores",
+	"score_groups",
+	"evaluate_groups",
+	"compare_aggregators",
+	"run_grid_search",
 ]

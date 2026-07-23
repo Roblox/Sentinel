@@ -33,6 +33,11 @@ import numpy as np
 import time
 from typing import Dict, List
 
+# Path to a saved Sentinel index. By default this points at the hate-speech
+# index built by examples/sentinel_against_hate.ipynb. Change it to your own
+# index path (local directory or s3:// URI) if needed.
+DEFAULT_INDEX_PATH = "./hate_speech_model"
+
 
 def create_user_profiles() -> Dict[str, List[str]]:
     """Create 10 different user profiles with varying speech patterns."""
@@ -163,9 +168,9 @@ def test_thresholds_and_ratios(review_mode: bool = False,
         # Time data loading
         load_start = time.time()
         index = SentinelLocalIndex.load(
-            path="path/to/local/index",
+            path=DEFAULT_INDEX_PATH,
             negative_to_positive_ratio=ratio,
-            Cache_Model=True & ~no_cache
+            cache_model=not no_cache,
         )
         load_time = time.time() - load_start
         total_load_time += load_time
