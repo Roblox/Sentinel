@@ -34,6 +34,14 @@ sentinel.sentinel_local_index
    :undoc-members:
    :show-inheritance:
 
+sentinel.simulation
+-------------------
+
+.. automodule:: sentinel.simulation
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Subpackages
 ----------
 
