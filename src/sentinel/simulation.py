@@ -56,6 +56,7 @@ Typical usage::
     rows = compare_aggregators(scored)
 """
 
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Dict, List, Mapping, Optional, Sequence
 
@@ -74,6 +75,8 @@ if TYPE_CHECKING:
     # Imported only for type hints. Kept out of runtime imports so this module
     # stays lightweight (numpy-only) and does not pull in torch / transformers.
     from sentinel.sentinel_local_index import SentinelLocalIndex
+
+LOG = logging.getLogger(__name__)
 
 
 # A convenient name -> function map of the built-in summarize metrics, so a
@@ -515,6 +518,21 @@ def compare_aggregators(
     ]
 
 
+def _row_count(embeddings: object) -> Optional[int]:
+    """Return the number of rows in an embedding tensor, or None if unavailable.
+
+    Args:
+        embeddings: A tensor-like object, or None.
+
+    Returns:
+        The row count, or None when the object has no usable shape.
+    """
+    shape = getattr(embeddings, "shape", None)
+    if shape is None or len(shape) == 0:
+        return None
+    return int(shape[0])
+
+
 def run_grid_search(
     index: "SentinelLocalIndex",
     groups: Sequence[LabeledGroup],
@@ -525,13 +543,33 @@ def run_grid_search(
     top_n: Optional[int] = None,
     decision_threshold: Optional[float] = None,
     show_progress_bar: bool = False,
+    n_positive_values: Optional[Sequence[int]] = None,
+    neg_to_pos_ratios: Optional[Sequence[float]] = None,
+    index_seed: Optional[int] = None,
 ) -> List[Dict[str, float]]:
     """Sweep hyperparameters and summarize metrics, returning a flat result table.
 
-    For each ``top_k`` the groups are scored once (the expensive step), then
-    every combination of ``min_score_values`` x ``aggregators`` is evaluated
-    cheaply. The returned rows are easy to turn into a ``pandas.DataFrame`` for
-    plotting.
+    The sweep is organised around what each setting costs. Index size and ratio
+    reshape the index (cheap, via
+    :meth:`~sentinel.sentinel_local_index.SentinelLocalIndex.subsample`), ``top_k``
+    forces a re-scoring (expensive), and thresholds and aggregators are evaluated
+    for free on the cached scores::
+
+        for n_positive in n_positive_values:      # cheap: subsample()
+          for ratio in neg_to_pos_ratios:         # cheap: subsample()
+            for top_k in top_k_values:            # EXPENSIVE: re-scores
+              for min_score in min_score_values:  # cheap
+                for aggregator in aggregators:    # cheap
+
+    The returned rows are easy to turn into a ``pandas.DataFrame`` for plotting.
+
+    Cost warning: the number of scoring passes is
+    ``len(n_positive_values) x len(neg_to_pos_ratios) x len(top_k_values)``. A 7x7
+    size/ratio grid with three ``top_k`` values is 147 full passes. Note that the
+    observation texts are re-encoded on every pass even though their embeddings do
+    not depend on the index at all, so most of that cost is recomputing identical
+    numbers. Letting callers pass pre-computed sample embeddings would collapse it
+    to roughly one encoding pass; that is a separate change.
 
     Args:
         index: A loaded :class:`~sentinel.sentinel_local_index.SentinelLocalIndex`.
@@ -543,30 +581,94 @@ def run_grid_search(
         decision_threshold: Cutoff for the classification family (``None`` =
             best-F1).
         show_progress_bar: Whether to show the encoder progress bar.
+        n_positive_values: Index sizes to try, as counts of positive examples.
+            ``None`` (the default) means one pass using the index exactly as given.
+        neg_to_pos_ratios: Negative-to-positive ratios to try. ``None`` (the
+            default) means one pass using the index exactly as given.
+        index_seed: Seed for the subsampling, so each index configuration is
+            reproducible across runs.
 
     Returns:
-        A list of metric dicts, one per ``(top_k, min_score_to_consider,
-        aggregator)`` combination. Each row also includes a ``top_k`` key.
+        A list of metric dicts, one per ``(n_positive, neg_to_pos_ratio, top_k,
+        min_score_to_consider, aggregator)`` combination. Each row also includes
+        ``top_k``, the requested ``n_positive`` and ``neg_to_pos_ratio``, and the
+        actual ``n_positive_actual`` / ``n_negative_actual`` counts. The actual
+        counts matter because a request is clipped when the index is smaller than
+        asked for - without them two rows can look identical while describing
+        different indices.
     """
     if aggregators is None:
         aggregators = DEFAULT_AGGREGATORS
 
+    # None means "one pass, use the index exactly as given", which reproduces the
+    # behaviour from before these axes existed.
+    positive_options: Sequence[Optional[int]] = (
+        list(n_positive_values) if n_positive_values is not None else [None]
+    )
+    ratio_options: Sequence[Optional[float]] = (
+        list(neg_to_pos_ratios) if neg_to_pos_ratios is not None else [None]
+    )
+    total_configurations = len(positive_options) * len(ratio_options)
+
     rows: List[Dict[str, float]] = []
-    for top_k in top_k_values:
-        scored = score_groups(
-            index, groups, top_k=top_k, show_progress_bar=show_progress_bar
-        )
-        for min_score in min_score_values:
-            for name, fn in aggregators.items():
-                row = evaluate_groups(
-                    scored,
-                    fn,
-                    aggregator_name=name,
-                    min_score_to_consider=min_score,
-                    top_n=top_n,
-                    decision_threshold=decision_threshold,
+    configuration = 0
+    for n_positive in positive_options:
+        for ratio in ratio_options:
+            configuration += 1
+
+            if n_positive is None and ratio is None:
+                # Never call subsample() in the default case, so this keeps working
+                # with any index-like object and stays byte-identical to before.
+                working_index = index
+            else:
+                working_index = index.subsample(
+                    n_positive=n_positive,
+                    neg_to_pos_ratio=ratio,
+                    seed=index_seed,
                 )
-                row["top_k"] = int(top_k)
-                rows.append(row)
+
+            n_positive_actual = _row_count(
+                getattr(working_index, "positive_embeddings", None)
+            )
+            n_negative_actual = _row_count(
+                getattr(working_index, "negative_embeddings", None)
+            )
+
+            if total_configurations > 1:
+                # A long sweep is otherwise indistinguishable from a hang.
+                LOG.info(
+                    "Grid search index configuration %d/%d: n_positive=%s ratio=%s "
+                    "(actual %s positives / %s negatives)",
+                    configuration,
+                    total_configurations,
+                    n_positive,
+                    ratio,
+                    n_positive_actual,
+                    n_negative_actual,
+                )
+
+            for top_k in top_k_values:
+                scored = score_groups(
+                    working_index,
+                    groups,
+                    top_k=top_k,
+                    show_progress_bar=show_progress_bar,
+                )
+                for min_score in min_score_values:
+                    for name, fn in aggregators.items():
+                        row = evaluate_groups(
+                            scored,
+                            fn,
+                            aggregator_name=name,
+                            min_score_to_consider=min_score,
+                            top_n=top_n,
+                            decision_threshold=decision_threshold,
+                        )
+                        row["top_k"] = int(top_k)
+                        row["n_positive"] = n_positive
+                        row["neg_to_pos_ratio"] = ratio
+                        row["n_positive_actual"] = n_positive_actual
+                        row["n_negative_actual"] = n_negative_actual
+                        rows.append(row)
 
     return rows
