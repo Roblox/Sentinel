@@ -37,7 +37,9 @@ LOG = logging.getLogger(__name__)
 # Constants for file names
 CONFIG_FILE_NAME = "sentinel_local_index_config.json"
 EMBEDDINGS_FILE_NAME = "embeddings.safetensors"
-CORPUS_FILE_NAME = "corpus.json"  # Optional; absent in indices saved before corpus support
+# Always written by save_index, holding nulls when no corpus is supplied. Absent
+# only in indices saved before corpus support existed.
+CORPUS_FILE_NAME = "corpus.json"
 # Storage keys - kept as positive/negative for backward compatibility
 POSITIVE_EMBEDDINGS_KEY = "positive_embeddings"  # Corresponds to rare class examples
 NEGATIVE_EMBEDDINGS_KEY = "negative_embeddings"  # Corresponds to common class examples
@@ -136,6 +138,11 @@ def save_index(
             an extra ``corpus.json`` so explanations survive a reload.
         negative_corpus: Optional texts behind the negative embeddings.
 
+    Note:
+        ``corpus.json`` is always written, storing nulls when a corpus is not
+        supplied, so that it never describes rows from an earlier save to the same
+        path. Saving without a corpus therefore clears any corpus already there.
+
     Raises:
         ValueError: If a corpus is supplied whose length does not match its embeddings.
     """
@@ -186,19 +193,24 @@ def save_index(
                 ) as f_out:
                     f_out.write(f_in.read())
 
+    # Written unconditionally, nulls included. Skipping the write when no corpus is
+    # supplied would leave an earlier save's corpus.json next to the embeddings just
+    # written, and a stale corpus that happens to have the same row count passes
+    # every alignment check we have, so explanations would name the wrong text with
+    # no warning. Writing nulls keeps the file describing the embeddings beside it.
+    #
     # The corpus is small text rather than a tensor blob, so smart_open handles both
     # local and S3 destinations directly, the same way the config file does.
-    if positive_corpus is not None or negative_corpus is not None:
-        corpus_path = _join_path(path, CORPUS_FILE_NAME)
-        LOG.info("Saving corpus to %s", corpus_path)
-        with smart_open.open(corpus_path, "w", transport_params=transport_params) as f:
-            json.dump(
-                {
-                    POSITIVE_CORPUS_KEY: positive_corpus,
-                    NEGATIVE_CORPUS_KEY: negative_corpus,
-                },
-                f,
-            )
+    corpus_path = _join_path(path, CORPUS_FILE_NAME)
+    LOG.info("Saving corpus to %s", corpus_path)
+    with smart_open.open(corpus_path, "w", transport_params=transport_params) as f:
+        json.dump(
+            {
+                POSITIVE_CORPUS_KEY: positive_corpus,
+                NEGATIVE_CORPUS_KEY: negative_corpus,
+            },
+            f,
+        )
 
     LOG.info("Successfully saved index to %s", path)
 
@@ -279,8 +291,9 @@ def load_corpus(
         transport_params: Optional transport parameters for smart_open.
 
     Returns:
-        Tuple of (positive_corpus, negative_corpus). Either element may be None, and
-        both are None for indices saved without a corpus.
+        Tuple of (positive_corpus, negative_corpus). Either element may be None,
+        whether because the file stores an explicit null or because the file is
+        absent entirely, as it is for indices saved before corpus support.
 
     Raises:
         json.JSONDecodeError: If the corpus file exists but is not valid JSON. A

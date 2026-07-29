@@ -149,10 +149,10 @@ def test_corpus_round_trip():
 
 
 def test_index_without_corpus_still_loads():
-    """Indices saved before corpus support have no corpus.json and must still load.
+    """Saving with no corpus writes explicit nulls, and loading reports no corpus.
 
-    This is the backward-compatibility guarantee: a missing file means "no corpus",
-    which is exactly the behaviour every existing index already has.
+    The file is written even with nothing to put in it so that it always describes
+    the embeddings beside it; see test_saving_without_corpus_clears_stale_corpus.
     """
     with tempfile.TemporaryDirectory() as temp_dir:
         save_index(
@@ -162,8 +162,10 @@ def test_index_without_corpus_still_loads():
             negative_embeddings=torch.rand(4, 8),
         )
 
-        # No corpus was passed, so the file should not have been created at all.
-        assert not os.path.exists(os.path.join(temp_dir, CORPUS_FILE_NAME))
+        corpus_file = os.path.join(temp_dir, CORPUS_FILE_NAME)
+        assert os.path.exists(corpus_file)
+        with open(corpus_file) as f:
+            assert json.load(f) == {"positive_corpus": None, "negative_corpus": None}
 
         # Both the existing loader and the new one behave.
         config, positive, negative = load_index(path=temp_dir)
@@ -171,8 +173,45 @@ def test_index_without_corpus_still_loads():
         assert load_corpus(path=temp_dir) == (None, None)
 
 
+def test_saving_without_corpus_clears_stale_corpus():
+    """Re-saving without a corpus must not leave the previous corpus behind.
+
+    The row counts here are deliberately identical, which is the case that slips
+    past every alignment check: a corpus of 3 texts lines up with 3 new embedding
+    rows, so nothing downstream can tell it describes the wrong 3 rows.
+    """
+    with tempfile.TemporaryDirectory() as temp_dir:
+        save_index(
+            path=temp_dir,
+            config=_config(),
+            positive_embeddings=torch.rand(3, 8),
+            negative_embeddings=torch.rand(3, 8),
+            positive_corpus=["first", "second", "third"],
+            negative_corpus=["one", "two", "three"],
+        )
+        assert load_corpus(path=temp_dir) == (
+            ["first", "second", "third"],
+            ["one", "two", "three"],
+        )
+
+        # Same shape, different content, and this time no corpus to go with it.
+        save_index(
+            path=temp_dir,
+            config=_config(),
+            positive_embeddings=torch.rand(3, 8),
+            negative_embeddings=torch.rand(3, 8),
+        )
+
+        assert load_corpus(path=temp_dir) == (None, None)
+
+
 def test_deleting_corpus_file_degrades_gracefully():
-    """Removing corpus.json from an index leaves the rest usable."""
+    """An index with no corpus.json at all leaves the rest usable.
+
+    This is the backward-compatibility guarantee: indices saved before corpus
+    support lack the file entirely, and a missing file has to mean "no corpus"
+    rather than an error.
+    """
     with tempfile.TemporaryDirectory() as temp_dir:
         save_index(
             path=temp_dir,
