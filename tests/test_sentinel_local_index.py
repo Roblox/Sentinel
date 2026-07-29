@@ -256,6 +256,35 @@ def test_end_to_end_workflow():
         # Negative examples should be zero
         assert negative_score == 0, "Negative example should score zero"
 
+        # 7. The corpus survives the round trip, so explanations can name real text.
+        assert new_index.positive_corpus == positive_texts
+        # A 1:1 ratio against 4 positives keeps 4 of the 5 negatives; whichever
+        # survive must still be the real texts, not row numbers.
+        assert new_index.negative_corpus is not None
+        assert len(new_index.negative_corpus) == 4
+        assert set(new_index.negative_corpus) <= set(negative_texts)
+
+        # 8. Explanations name sentences rather than degrading to row indices, which
+        # is the user-visible symptom of the corpus being dropped on save.
+        neighbors = [
+            record["neighbor"]
+            for explanation in result.explanations.values()
+            for record in (explanation["neighbors"] or [])
+        ]
+        assert neighbors, "expected at least one neighbor record"
+        assert all(isinstance(n, str) for n in neighbors)
+        assert all(n in set(positive_texts) | set(negative_texts) for n in neighbors)
+
+        # 9. Loading with a seed is reproducible, so a saved index is a fixed artifact.
+        seeded_a = SentinelLocalIndex.load(
+            path=temp_dir, negative_to_positive_ratio=1.0, seed=42
+        )
+        seeded_b = SentinelLocalIndex.load(
+            path=temp_dir, negative_to_positive_ratio=1.0, seed=42
+        )
+        assert torch.equal(seeded_a.negative_embeddings, seeded_b.negative_embeddings)
+        assert seeded_a.negative_corpus == seeded_b.negative_corpus
+
 
 class TestSentinelLocalIndexEdgeCases:
     """Test edge cases and error handling in SentinelLocalIndex."""
@@ -503,3 +532,108 @@ class TestSentinelLocalIndexEdgeCases:
         
         assert isinstance(result, RareClassAffinityResult)
         assert result.rare_class_affinity_score == 0.0  # Should be 0.0 when no scores pass
+
+
+def _labelled_index(n_positive=4, n_negative=40, dim=8):
+    """Build an index where embedding row i provably belongs to text "neg i".
+
+    Row i is filled with the value i, so after any reshuffle you can read an
+    embedding and know which text it must be paired with. That makes misalignment
+    detectable rather than merely suspected.
+    """
+    negative_embeddings = torch.arange(n_negative, dtype=torch.float32).repeat(dim, 1).T
+    return SentinelLocalIndex(
+        sentence_model=None,
+        positive_embeddings=torch.ones(n_positive, dim),
+        negative_embeddings=negative_embeddings,
+        positive_corpus=[f"pos {i}" for i in range(n_positive)],
+        negative_corpus=[f"neg {i}" for i in range(n_negative)],
+    )
+
+
+class TestNegativeDownsampling:
+    """Seeding and corpus alignment when negatives are downsampled."""
+
+    def test_same_seed_gives_identical_subset(self):
+        """A seed makes the surviving negatives reproducible."""
+        first = _labelled_index(n_negative=500)
+        second = _labelled_index(n_negative=500)
+
+        first._apply_negative_ratio(50.0, seed=42)
+        second._apply_negative_ratio(50.0, seed=42)
+
+        assert torch.equal(first.negative_embeddings, second.negative_embeddings)
+        assert first.negative_corpus == second.negative_corpus
+
+    def test_different_seeds_give_different_subsets(self):
+        """Different seeds pick different negatives, confirming the seed is used."""
+        first = _labelled_index(n_negative=500)
+        second = _labelled_index(n_negative=500)
+
+        first._apply_negative_ratio(50.0, seed=1)
+        second._apply_negative_ratio(50.0, seed=2)
+
+        assert not torch.equal(first.negative_embeddings, second.negative_embeddings)
+
+    def test_unseeded_downsampling_varies(self):
+        """Without a seed the subset differs per call - the behaviour being fixed.
+
+        500 rows choosing 200 makes an accidental collision effectively impossible,
+        so this is not a flaky assertion.
+        """
+        first = _labelled_index(n_negative=500)
+        second = _labelled_index(n_negative=500)
+
+        first._apply_negative_ratio(50.0)
+        second._apply_negative_ratio(50.0)
+
+        assert not torch.equal(first.negative_embeddings, second.negative_embeddings)
+
+    def test_corpus_stays_aligned_with_embeddings(self):
+        """Every surviving embedding row still sits next to its own text."""
+        index = _labelled_index(n_negative=40)
+        index._apply_negative_ratio(5.0)  # 4 positives * 5 -> keep 20
+
+        assert index.negative_embeddings.shape[0] == 20
+        assert len(index.negative_corpus) == 20
+
+        for row, text in zip(index.negative_embeddings, index.negative_corpus):
+            # Row i was filled with the value i, so it must pair with "neg i".
+            assert text == f"neg {int(row[0].item())}"
+
+    def test_surviving_rows_keep_original_order(self):
+        """Sorting the kept indices preserves relative order, which aids debugging."""
+        index = _labelled_index(n_negative=40)
+        index._apply_negative_ratio(5.0)
+
+        values = [int(row[0].item()) for row in index.negative_embeddings]
+        assert values == sorted(values)
+
+    def test_downsampling_without_corpus_still_works(self):
+        """An index with no corpus downsamples fine and stays corpus-free."""
+        index = SentinelLocalIndex(
+            sentence_model=None,
+            positive_embeddings=torch.ones(4, 8),
+            negative_embeddings=torch.rand(40, 8),
+        )
+        index._apply_negative_ratio(5.0, seed=7)
+
+        assert index.negative_embeddings.shape[0] == 20
+        assert index.negative_corpus is None
+
+    def test_misaligned_corpus_is_dropped_with_warning(self, caplog):
+        """A corpus that does not match its embeddings is discarded, loudly.
+
+        Falling back to row numbers is recoverable; naming the wrong sentence as the
+        reason for a score is not.
+        """
+        import logging
+
+        caplog.set_level(logging.WARNING)
+
+        index = _labelled_index(n_negative=40)
+        index.negative_corpus = ["too", "few"]  # deliberately misaligned
+        index._apply_negative_ratio(5.0, seed=7)
+
+        assert index.negative_corpus is None
+        assert "does not match embedding rows" in caplog.text

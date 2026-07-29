@@ -140,6 +140,11 @@ from sentinel.sentinel_local_index import SentinelLocalIndex
 # Load a previously saved index from a local path
 index = SentinelLocalIndex.load(path="path/to/local/index")
 
+# Loading downsamples the negatives to the requested ratio, and that choice is
+# random. Pass a seed to make it reproducible, so the same saved index always
+# behaves identically - worth doing whenever you are tuning or debugging.
+index = SentinelLocalIndex.load(path="path/to/local/index", seed=42)
+
 # Or load from S3
 index = SentinelLocalIndex.load(
     path="s3://my-bucket/path/to/index",
@@ -337,6 +342,19 @@ Sentinel supports both local file storage and S3 storage:
 - For S3 storage, use URI format: `s3://bucket-name/path/to/index`
 
 The storage is abstracted using `smart_open`, making it seamless to switch between storage backends.
+
+A saved index is a directory of up to three files:
+
+| File | Contents |
+|------|----------|
+| `sentinel_local_index_config.json` | Encoder model name, encoding kwargs, model card |
+| `embeddings.safetensors` | The positive and negative embedding tensors |
+| `corpus.json` | The original texts behind those embeddings — **optional** |
+
+`corpus.json` is written whenever the index has a corpus, and it is what lets
+explanations name the matched sentence after a reload. Without it, `explanations`
+falls back to reporting the row number of the match instead of its text. Indices
+saved before this file existed simply lack it and continue to load normally.
 
 ## Examples
 To run the notebook examples

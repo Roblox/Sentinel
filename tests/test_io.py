@@ -24,9 +24,11 @@ from sentinel.io.saved_index_config import SavedIndexConfig
 from sentinel.io.index_io import (
     save_index,
     load_index,
+    load_corpus,
     create_s3_transport_params,
     CONFIG_FILE_NAME,
     EMBEDDINGS_FILE_NAME,
+    CORPUS_FILE_NAME,
 )
 
 
@@ -114,6 +116,117 @@ def test_index_io_local(positive_shape, negative_shape):
         assert loaded_negative.shape == negative_embeddings.shape
         assert torch.allclose(loaded_positive, positive_embeddings)
         assert torch.allclose(loaded_negative, negative_embeddings)
+
+
+def _config():
+    """Build a throwaway config for corpus tests."""
+    return SavedIndexConfig(
+        encoder_model_name_or_path="all-MiniLM-L6-v2",
+        encoding_kwargs={"normalize_embeddings": True},
+    )
+
+
+def test_corpus_round_trip():
+    """A saved corpus comes back identical, so explanations survive a reload."""
+    positive_corpus = [f"pos {i}" for i in range(6)]
+    negative_corpus = [f"neg {i}" for i in range(9)]
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        save_index(
+            path=temp_dir,
+            config=_config(),
+            positive_embeddings=torch.rand(6, 8),
+            negative_embeddings=torch.rand(9, 8),
+            positive_corpus=positive_corpus,
+            negative_corpus=negative_corpus,
+        )
+
+        assert os.path.exists(os.path.join(temp_dir, CORPUS_FILE_NAME))
+
+        loaded_positive, loaded_negative = load_corpus(path=temp_dir)
+        assert loaded_positive == positive_corpus
+        assert loaded_negative == negative_corpus
+
+
+def test_index_without_corpus_still_loads():
+    """Indices saved before corpus support have no corpus.json and must still load.
+
+    This is the backward-compatibility guarantee: a missing file means "no corpus",
+    which is exactly the behaviour every existing index already has.
+    """
+    with tempfile.TemporaryDirectory() as temp_dir:
+        save_index(
+            path=temp_dir,
+            config=_config(),
+            positive_embeddings=torch.rand(4, 8),
+            negative_embeddings=torch.rand(4, 8),
+        )
+
+        # No corpus was passed, so the file should not have been created at all.
+        assert not os.path.exists(os.path.join(temp_dir, CORPUS_FILE_NAME))
+
+        # Both the existing loader and the new one behave.
+        config, positive, negative = load_index(path=temp_dir)
+        assert positive.shape == (4, 8)
+        assert load_corpus(path=temp_dir) == (None, None)
+
+
+def test_deleting_corpus_file_degrades_gracefully():
+    """Removing corpus.json from an index leaves the rest usable."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        save_index(
+            path=temp_dir,
+            config=_config(),
+            positive_embeddings=torch.rand(3, 8),
+            negative_embeddings=torch.rand(3, 8),
+            positive_corpus=["a", "b", "c"],
+            negative_corpus=["x", "y", "z"],
+        )
+        os.remove(os.path.join(temp_dir, CORPUS_FILE_NAME))
+
+        assert load_corpus(path=temp_dir) == (None, None)
+        # load_index is untouched by any of this.
+        config, positive, negative = load_index(path=temp_dir)
+        assert positive.shape == (3, 8)
+
+
+@pytest.mark.parametrize("which", ["positive", "negative"])
+def test_save_refuses_misaligned_corpus(which):
+    """A corpus that does not match its embeddings is refused at save time.
+
+    Failing here is deliberate: writing it would bake the misalignment into the
+    artifact, where it would later surface as confidently wrong explanations.
+    """
+    kwargs = {
+        "positive_embeddings": torch.rand(5, 8),
+        "negative_embeddings": torch.rand(5, 8),
+        f"{which}_corpus": ["only", "three", "texts"],
+    }
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with pytest.raises(ValueError, match=f"{which}_corpus has 3 entries"):
+            save_index(path=temp_dir, config=_config(), **kwargs)
+
+        # Nothing partial was left behind.
+        assert not os.path.exists(os.path.join(temp_dir, CORPUS_FILE_NAME))
+
+
+def test_malformed_corpus_json_propagates():
+    """Corrupt JSON is a real problem and is not silently swallowed."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        save_index(
+            path=temp_dir,
+            config=_config(),
+            positive_embeddings=torch.rand(2, 8),
+            negative_embeddings=torch.rand(2, 8),
+            positive_corpus=["a", "b"],
+            negative_corpus=["c", "d"],
+        )
+        with open(os.path.join(temp_dir, CORPUS_FILE_NAME), "w") as f:
+            f.write("{not valid json")
+
+        with pytest.raises(json.JSONDecodeError):
+            load_corpus(path=temp_dir)
 
 
 def test_create_s3_transport_params():

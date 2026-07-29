@@ -15,6 +15,6 @@
 """IO utilities for Sentinel."""
 
 from sentinel.io.saved_index_config import SavedIndexConfig
-from sentinel.io.index_io import save_index, load_index
+from sentinel.io.index_io import save_index, load_index, load_corpus
 
-__all__ = ["SavedIndexConfig", "save_index", "load_index"]
+__all__ = ["SavedIndexConfig", "save_index", "load_index", "load_corpus"]
