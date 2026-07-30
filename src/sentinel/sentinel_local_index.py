@@ -70,6 +70,38 @@ def _corpus_if_aligned(
     return corpus
 
 
+def _split_generators(
+    seed: Optional[int],
+) -> Tuple[Optional[torch.Generator], Optional[torch.Generator]]:
+    """Derive one independent generator per index side, or (None, None) when unseeded.
+
+    A single shared generator would couple the two sides: selecting rows advances it,
+    so whether the positives drew at all would decide which negatives came out. Keeping
+    every positive draws nothing, so a grid cell at full positive size would select
+    different negatives from one that subsampled, and two cells meant to differ along
+    one axis would quietly differ along both.
+
+    Args:
+        seed: The caller's seed, or None to leave selection unseeded.
+
+    Returns:
+        Tuple of (positive generator, negative generator), both None when seed is None.
+    """
+    if seed is None:
+        return None, None
+    # Draw the two seeds from a root generator rather than offsetting the caller's seed
+    # by hand, which keeps them independent without inventing arithmetic that could
+    # collide across nearby seeds.
+    root = torch.Generator().manual_seed(seed)
+    positive_seed, negative_seed = torch.randint(
+        high=2**62, size=(2,), generator=root
+    ).tolist()
+    return (
+        torch.Generator().manual_seed(positive_seed),
+        torch.Generator().manual_seed(negative_seed),
+    )
+
+
 def _take_rows(
     embeddings: torch.Tensor,
     corpus: Optional[List[str]],
@@ -396,6 +428,141 @@ class SentinelLocalIndex:
                 num_negative_to_keep,
                 self.negative_embeddings.shape[0],
             )
+
+    def _select_subset(
+        self,
+        embeddings: torch.Tensor,
+        corpus: Optional[List[str]],
+        n_keep: Optional[int],
+        generator: Optional[torch.Generator],
+        label: str,
+    ) -> Tuple[torch.Tensor, Optional[List[str]]]:
+        """Randomly keep n_keep rows of one side of the index, corpus included.
+
+        Args:
+            embeddings: The embeddings to select from.
+            corpus: Matching texts, or None.
+            n_keep: How many rows to keep. None or a value at least as large as the
+                available rows keeps everything.
+            generator: Optional seeded generator for a reproducible choice.
+            label: "positive" or "negative", used in log messages.
+
+        Returns:
+            Tuple of (embeddings, corpus) for the kept rows.
+        """
+        available = embeddings.shape[0]
+
+        if n_keep is None or n_keep >= available:
+            if n_keep is not None and n_keep > available:
+                LOG.info(
+                    "Requested %d %s examples but the index only has %d - keeping all of them.",
+                    n_keep,
+                    label,
+                    available,
+                )
+            # Copy the corpus list so callers cannot mutate the original through the copy.
+            return embeddings, (list(corpus) if corpus is not None else None)
+
+        indices = torch.randperm(available, generator=generator)[:n_keep]
+        # Order does not affect semantic_search, but keeping the original relative
+        # order makes the result far easier to diff and debug.
+        indices = torch.sort(indices).values
+        LOG.info("Keeping %d %s examples out of %d", n_keep, label, available)
+        return _take_rows(embeddings, corpus, indices)
+
+    def subsample(
+        self,
+        n_positive: Optional[int] = None,
+        neg_to_pos_ratio: Optional[float] = None,
+        seed: Optional[int] = None,
+    ) -> "SentinelLocalIndex":
+        """Return a smaller copy of this index, reusing the existing embeddings.
+
+        Encoding a sentence produces the same numbers regardless of which index it
+        ends up in, so a small index is just a large one with rows removed. This turns
+        "re-encode everything" into "copy the rows you want", which is what makes
+        sweeping index sizes affordable.
+
+        Corpus texts are kept aligned with the embeddings they describe, and the
+        sentence model is shared with the copy rather than reloaded.
+
+        Args:
+            n_positive: How many positive examples to keep. None keeps all of them.
+                If larger than the index, everything available is kept.
+            neg_to_pos_ratio: Negatives to keep per kept positive. None leaves the
+                negatives untouched - note that shrinking the positives alone therefore
+                *changes* the effective ratio, which is easy to do by accident.
+            seed: Optional seed making the selection reproducible. Uses private
+                torch.Generators, so the caller's other randomness is unaffected. Each
+                side gets its own, which means the negatives chosen for a given seed and
+                count do not change according to whether the positives were subsampled.
+
+        Returns:
+            A new SentinelLocalIndex. This instance is never modified.
+
+        Raises:
+            ValueError: If the index has no embeddings, or if n_positive or
+                neg_to_pos_ratio is not positive. Unlike load()'s ratio handling, which
+                warns and carries on, this raises: a grid search that silently ignored a
+                bad argument would emit result rows describing an index you did not ask for.
+        """
+        if self.positive_embeddings is None or self.negative_embeddings is None:
+            raise ValueError(
+                "Cannot subsample an index without both positive and negative embeddings."
+            )
+        if n_positive is not None and n_positive <= 0:
+            raise ValueError(f"n_positive must be positive, got {n_positive}.")
+        if neg_to_pos_ratio is not None and neg_to_pos_ratio <= 0:
+            raise ValueError(
+                f"neg_to_pos_ratio must be positive, got {neg_to_pos_ratio}."
+            )
+
+        # One generator per side, so neither side's selection depends on how many draws
+        # the other happened to make. See _split_generators.
+        positive_generator, negative_generator = _split_generators(seed)
+
+        # Positives first: the ratio is defined relative to how many positives survive,
+        # so that count has to be settled before the negatives can be sized.
+        positive_embeddings, positive_corpus = self._select_subset(
+            self.positive_embeddings,
+            self.positive_corpus,
+            n_positive,
+            positive_generator,
+            "positive",
+        )
+
+        n_negative: Optional[int] = None
+        if neg_to_pos_ratio is not None:
+            n_negative = int(positive_embeddings.shape[0] * neg_to_pos_ratio)
+            if n_negative <= 0:
+                LOG.info(
+                    "Ratio %.4f against %d positives rounds to zero negatives - keeping 1, "
+                    "since an index with no negatives cannot score anything.",
+                    neg_to_pos_ratio,
+                    positive_embeddings.shape[0],
+                )
+                n_negative = 1
+
+        negative_embeddings, negative_corpus = self._select_subset(
+            self.negative_embeddings,
+            self.negative_corpus,
+            n_negative,
+            negative_generator,
+            "negative",
+        )
+
+        # scale_fn, encoding_kwargs and model_card all carry over. A dropped scale_fn
+        # would silently change scores for models like E5.
+        return type(self)(
+            sentence_model=self.sentence_model,
+            positive_embeddings=positive_embeddings,
+            negative_embeddings=negative_embeddings,
+            scale_fn=self.scale_fn,
+            encoding_additional_kwargs=self.encoding_kwargs,
+            positive_corpus=positive_corpus,
+            negative_corpus=negative_corpus,
+            model_card=self.model_card,
+        )
 
     def calculate_rare_class_affinity(
         self,
