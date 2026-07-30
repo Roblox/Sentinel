@@ -19,7 +19,7 @@ This module provides the implementation of the SentinelLocalIndex class for loca
 """
 
 import logging
-from typing import Optional, List, Mapping, Any, Callable
+from typing import Optional, List, Mapping, Any, Callable, Tuple
 
 import numpy as np
 import torch
@@ -28,11 +28,79 @@ from sentence_transformers.util import semantic_search
 
 from sentinel.score_formulae import calculate_contrastive_score, skewness, contrastive_components
 from sentinel.io.saved_index_config import SavedIndexConfig
-from sentinel.io.index_io import save_index, load_index, create_s3_transport_params
+from sentinel.io.index_io import (
+    save_index,
+    load_index,
+    load_corpus,
+    create_s3_transport_params,
+)
 from sentinel.embeddings.sbert import get_sentence_transformer_and_scaling_fn
 from sentinel.score_types import RareClassAffinityResult
 
 LOG = logging.getLogger(__name__)
+
+
+def _corpus_if_aligned(
+    name: str, corpus: Optional[List[str]], embeddings: Optional[torch.Tensor]
+) -> Optional[List[str]]:
+    """Return the corpus only if it lines up with its embeddings, else None.
+
+    Degrading to row numbers is recoverable; confidently reporting the wrong
+    sentence as the reason for a score is not, so a mismatch is discarded.
+
+    Args:
+        name: Which corpus is being checked, used in the warning.
+        corpus: The corpus texts, or None.
+        embeddings: The embeddings the corpus is supposed to describe.
+
+    Returns:
+        The corpus unchanged, or None if it is absent or misaligned.
+    """
+    if corpus is None or embeddings is None:
+        return None
+    if len(corpus) != embeddings.shape[0]:
+        LOG.warning(
+            "Discarding %s corpus: %d texts for %d embedding rows. Explanations will "
+            "show row numbers instead of naming the wrong text.",
+            name,
+            len(corpus),
+            embeddings.shape[0],
+        )
+        return None
+    return corpus
+
+
+def _take_rows(
+    embeddings: torch.Tensor,
+    corpus: Optional[List[str]],
+    indices: torch.Tensor,
+) -> Tuple[torch.Tensor, Optional[List[str]]]:
+    """Select rows from embeddings and the matching corpus texts, keeping them aligned.
+
+    The embeddings and the corpus are two parallel lists: row *i* of one describes
+    entry *i* of the other. Any operation that drops rows has to drop the same
+    positions from both, or explanations will confidently name unrelated text.
+
+    Args:
+        embeddings: Tensor to select rows from.
+        corpus: Texts describing those rows, or None if the index has no corpus.
+        indices: Row positions to keep.
+
+    Returns:
+        Tuple of (selected embeddings, selected corpus or None).
+    """
+    selected = embeddings[indices]
+    if corpus is None:
+        return selected, None
+    if len(corpus) != embeddings.shape[0]:
+        LOG.warning(
+            "Corpus length %d does not match embedding rows %d - dropping corpus "
+            "rather than risk misaligned explanations.",
+            len(corpus),
+            embeddings.shape[0],
+        )
+        return selected, None
+    return selected, [corpus[i] for i in indices.tolist()]
 
 
 class SentinelLocalIndex:
@@ -164,6 +232,8 @@ class SentinelLocalIndex:
             positive_embeddings=self.positive_embeddings,
             negative_embeddings=self.negative_embeddings,
             transport_params=transport_params,
+            positive_corpus=self.positive_corpus,
+            negative_corpus=self.negative_corpus,
         )
 
         # Return the config for informational purposes
@@ -177,6 +247,7 @@ class SentinelLocalIndex:
         aws_secret_access_key: Optional[str] = None,
         negative_to_positive_ratio: Optional[float] = 5.0,
         cache_model: bool = False,
+        seed: Optional[int] = None,
     ) -> "SentinelLocalIndex":
         """
         Load the index from a path and returns a new SentinelLocalIndex instance.
@@ -190,6 +261,9 @@ class SentinelLocalIndex:
                                       If 5.0 (default), uses a 5:1 negative to positive ratio for optimal performance.
                                       If specified, downsamples negative examples to achieve the desired ratio.
             cache_model: Whether to use model caching for faster subsequent loads. Default True.
+            seed: Optional seed for the negative downsampling. Without it the surviving
+                subset differs on every load, so the same saved index scores slightly
+                differently each time. Pass a seed to make loading reproducible.
 
         Returns:
             A new SentinelLocalIndex instance with the loaded model and embeddings.
@@ -202,6 +276,17 @@ class SentinelLocalIndex:
         # Load the index
         config, positive_embeddings, negative_embeddings = load_index(
             path=path, transport_params=transport_params
+        )
+
+        # Optional; absent for indices saved before corpus support.
+        positive_corpus, negative_corpus = load_corpus(
+            path=path, transport_params=transport_params
+        )
+        positive_corpus = _corpus_if_aligned(
+            "positive", positive_corpus, positive_embeddings
+        )
+        negative_corpus = _corpus_if_aligned(
+            "negative", negative_corpus, negative_embeddings
         )
 
         # Create the sentence model and get the scaling function
@@ -219,15 +304,19 @@ class SentinelLocalIndex:
             positive_embeddings=positive_embeddings,
             negative_embeddings=negative_embeddings,
             encoding_additional_kwargs=config.encoding_kwargs,
+            positive_corpus=positive_corpus,
+            negative_corpus=negative_corpus,
             model_card=config.model_card,
         )
 
         # Apply negative ratio if needed
-        instance._apply_negative_ratio(negative_to_positive_ratio)
+        instance._apply_negative_ratio(negative_to_positive_ratio, seed=seed)
 
         return instance
 
-    def _apply_negative_ratio(self, negative_to_positive_ratio: Optional[float]):
+    def _apply_negative_ratio(
+        self, negative_to_positive_ratio: Optional[float], seed: Optional[int] = None
+    ):
         """
         Apply the negative_to_positive_ratio to reduce the number of negative (common class) examples.
 
@@ -235,6 +324,9 @@ class SentinelLocalIndex:
             negative_to_positive_ratio: The ratio of negative samples to keep relative to positive samples.
                                       If None, preserves the original ratio from the saved index.
                                       If 5.0 (default), uses optimized 5:1 ratio for best performance.
+            seed: Optional seed making the choice of surviving negatives reproducible.
+                Uses a private torch.Generator rather than a global seed, so nothing
+                else in the caller's program has its randomness reset.
         """
         # Handle null/invalid inputs - preserve original ratio if any issues occur
         if negative_to_positive_ratio is None:
@@ -283,10 +375,18 @@ class SentinelLocalIndex:
             )
             # Randomly select a subset of the negative examples with error handling
             try:
-                indices = torch.randperm(self.negative_embeddings.shape[0])[
-                    :num_negative_to_keep
-                ]
-                self.negative_embeddings = self.negative_embeddings[indices]
+                generator = (
+                    torch.Generator().manual_seed(seed) if seed is not None else None
+                )
+                indices = torch.randperm(
+                    self.negative_embeddings.shape[0], generator=generator
+                )[:num_negative_to_keep]
+                # Sorting does not change which rows survive, only their order. Keeping
+                # the original relative order makes the result far easier to diff and debug.
+                indices = torch.sort(indices).values
+                self.negative_embeddings, self.negative_corpus = _take_rows(
+                    self.negative_embeddings, self.negative_corpus, indices
+                )
             except (RuntimeError, IndexError, TypeError) as e:
                 LOG.error("Error during negative embedding downsampling: %s. Preserving original embeddings.", str(e))
                 return
