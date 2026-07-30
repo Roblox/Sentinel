@@ -724,6 +724,34 @@ class TestSubsample:
         assert a.positive_corpus == b.positive_corpus
         assert not torch.equal(a.positive_embeddings, c.positive_embeddings)
 
+    def test_negatives_do_not_depend_on_the_positive_code_path(self):
+        """The same seed and negative count must select the same negatives either way.
+
+        Keeping every positive returns early without drawing, while subsampling them
+        calls randperm. On a single shared generator that difference leaves the
+        generator in a different state, so the negatives would silently differ between
+        two grid cells that were only meant to differ in positive size.
+
+        Both calls below land on 20 negatives by different routes: 10 positives at
+        ratio 2.0 (no positive draw) and 5 positives at ratio 4.0 (a positive draw).
+        """
+        index = _labelled_pair_index(n_positive=10, n_negative=200)
+
+        kept_all_positives = index.subsample(neg_to_pos_ratio=2.0, seed=42)
+        subsampled_positives = index.subsample(
+            n_positive=5, neg_to_pos_ratio=4.0, seed=42
+        )
+
+        assert kept_all_positives.negative_embeddings.shape[0] == 20
+        assert subsampled_positives.negative_embeddings.shape[0] == 20
+        assert torch.equal(
+            kept_all_positives.negative_embeddings,
+            subsampled_positives.negative_embeddings,
+        )
+        assert (
+            kept_all_positives.negative_corpus == subsampled_positives.negative_corpus
+        )
+
     def test_requesting_more_than_available_keeps_everything(self):
         """Over-asking clips rather than erroring, matching load()'s existing behaviour."""
         index = _labelled_pair_index(n_positive=20, n_negative=40)

@@ -70,6 +70,38 @@ def _corpus_if_aligned(
     return corpus
 
 
+def _split_generators(
+    seed: Optional[int],
+) -> Tuple[Optional[torch.Generator], Optional[torch.Generator]]:
+    """Derive one independent generator per index side, or (None, None) when unseeded.
+
+    A single shared generator would couple the two sides: selecting rows advances it,
+    so whether the positives drew at all would decide which negatives came out. Keeping
+    every positive draws nothing, so a grid cell at full positive size would select
+    different negatives from one that subsampled, and two cells meant to differ along
+    one axis would quietly differ along both.
+
+    Args:
+        seed: The caller's seed, or None to leave selection unseeded.
+
+    Returns:
+        Tuple of (positive generator, negative generator), both None when seed is None.
+    """
+    if seed is None:
+        return None, None
+    # Draw the two seeds from a root generator rather than offsetting the caller's seed
+    # by hand, which keeps them independent without inventing arithmetic that could
+    # collide across nearby seeds.
+    root = torch.Generator().manual_seed(seed)
+    positive_seed, negative_seed = torch.randint(
+        high=2**62, size=(2,), generator=root
+    ).tolist()
+    return (
+        torch.Generator().manual_seed(positive_seed),
+        torch.Generator().manual_seed(negative_seed),
+    )
+
+
 def _take_rows(
     embeddings: torch.Tensor,
     corpus: Optional[List[str]],
@@ -460,8 +492,10 @@ class SentinelLocalIndex:
             neg_to_pos_ratio: Negatives to keep per kept positive. None leaves the
                 negatives untouched - note that shrinking the positives alone therefore
                 *changes* the effective ratio, which is easy to do by accident.
-            seed: Optional seed making the selection reproducible. Uses a private
-                torch.Generator, so the caller's other randomness is unaffected.
+            seed: Optional seed making the selection reproducible. Uses private
+                torch.Generators, so the caller's other randomness is unaffected. Each
+                side gets its own, which means the negatives chosen for a given seed and
+                count do not change according to whether the positives were subsampled.
 
         Returns:
             A new SentinelLocalIndex. This instance is never modified.
@@ -483,12 +517,18 @@ class SentinelLocalIndex:
                 f"neg_to_pos_ratio must be positive, got {neg_to_pos_ratio}."
             )
 
-        generator = torch.Generator().manual_seed(seed) if seed is not None else None
+        # One generator per side, so neither side's selection depends on how many draws
+        # the other happened to make. See _split_generators.
+        positive_generator, negative_generator = _split_generators(seed)
 
         # Positives first: the ratio is defined relative to how many positives survive,
         # so that count has to be settled before the negatives can be sized.
         positive_embeddings, positive_corpus = self._select_subset(
-            self.positive_embeddings, self.positive_corpus, n_positive, generator, "positive"
+            self.positive_embeddings,
+            self.positive_corpus,
+            n_positive,
+            positive_generator,
+            "positive",
         )
 
         n_negative: Optional[int] = None
@@ -504,7 +544,11 @@ class SentinelLocalIndex:
                 n_negative = 1
 
         negative_embeddings, negative_corpus = self._select_subset(
-            self.negative_embeddings, self.negative_corpus, n_negative, generator, "negative"
+            self.negative_embeddings,
+            self.negative_corpus,
+            n_negative,
+            negative_generator,
+            "negative",
         )
 
         # scale_fn, encoding_kwargs and model_card all carry over. A dropped scale_fn
