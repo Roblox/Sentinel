@@ -590,12 +590,19 @@ def run_grid_search(
 
     Returns:
         A list of metric dicts, one per ``(n_positive, neg_to_pos_ratio, top_k,
-        min_score_to_consider, aggregator)`` combination. Each row also includes
-        ``top_k``, the requested ``n_positive`` and ``neg_to_pos_ratio``, and the
-        actual ``n_positive_actual`` / ``n_negative_actual`` counts. The actual
+        min_score_to_consider, aggregator)`` combination. Alongside everything
+        :func:`evaluate_groups` returns, each row carries ``top_k`` and four
+        ``index_``-prefixed columns describing the index it was scored against: the
+        requested ``index_n_positive`` and ``index_neg_to_pos_ratio``, and the actual
+        ``index_n_positive_actual`` / ``index_n_negative_actual`` counts. The actual
         counts matter because a request is clipped when the index is smaller than
         asked for - without them two rows can look identical while describing
         different indices.
+
+        The prefix is not decoration. ``evaluate_groups`` already returns an
+        ``n_positive`` holding the number of positive *groups* in the evaluation set,
+        so an unprefixed index size would overwrite it and quietly turn evaluation
+        metadata into an index size.
     """
     if aggregators is None:
         aggregators = DEFAULT_AGGREGATORS
@@ -665,10 +672,15 @@ def run_grid_search(
                             decision_threshold=decision_threshold,
                         )
                         row["top_k"] = int(top_k)
-                        row["n_positive"] = n_positive
-                        row["neg_to_pos_ratio"] = ratio
-                        row["n_positive_actual"] = n_positive_actual
-                        row["n_negative_actual"] = n_negative_actual
+                        # Every index-describing column is prefixed, because
+                        # evaluate_groups already returns an "n_positive" meaning the
+                        # number of positive *groups* in the evaluation set. Reusing
+                        # that name here overwrote it, silently replacing evaluation
+                        # metadata with an index size.
+                        row["index_n_positive"] = n_positive
+                        row["index_neg_to_pos_ratio"] = ratio
+                        row["index_n_positive_actual"] = n_positive_actual
+                        row["index_n_negative_actual"] = n_negative_actual
                         rows.append(row)
 
     return rows

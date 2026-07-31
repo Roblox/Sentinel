@@ -309,8 +309,41 @@ def test_grid_search_without_index_axes_never_subsamples():
     assert index.subsample_calls == []
     assert len(rows) == len(DEFAULT_AGGREGATORS)
     # The new columns are still present, so the table shape is consistent.
-    assert all(row["n_positive"] is None for row in rows)
-    assert all(row["neg_to_pos_ratio"] is None for row in rows)
+    assert all(row["index_n_positive"] is None for row in rows)
+    assert all(row["index_neg_to_pos_ratio"] is None for row in rows)
+
+
+def test_grid_search_keeps_evaluate_groups_n_positive():
+    """The index columns must not overwrite evaluate_groups' own metadata.
+
+    ``n_positive`` there means "how many evaluation groups are positive", which is
+    unrelated to the index size the sweep varies. An unprefixed index column landed
+    on that key and replaced a real count with the requested size - or with None on
+    the default path, where no size is requested at all.
+    """
+    groups = _two_groups()  # one positive group, one negative
+    rows = run_grid_search(
+        _StubSubsamplableIndex(),
+        groups,
+        top_k_values=[3],
+        min_score_values=[0.0],
+    )
+
+    assert all(row["n_positive"] == 1 for row in rows)
+    assert all(row["n_groups"] == 2 for row in rows)
+
+    # Still true once the index axes are actually in use.
+    swept = run_grid_search(
+        _StubSubsamplableIndex(),
+        groups,
+        top_k_values=[3],
+        min_score_values=[0.0],
+        n_positive_values=[10],
+        neg_to_pos_ratios=[2.0],
+    )
+
+    assert all(row["n_positive"] == 1 for row in swept)
+    assert all(row["index_n_positive"] == 10 for row in swept)
 
 
 def test_grid_search_sweeps_index_size_and_ratio():
@@ -354,12 +387,12 @@ def test_grid_search_reports_requested_and_actual_counts():
         neg_to_pos_ratios=[2.0],
     )
 
-    by_request = {row["n_positive"]: row for row in rows}
-    assert by_request[10]["n_positive_actual"] == 10
-    assert by_request[10]["n_negative_actual"] == 20
+    by_request = {row["index_n_positive"]: row for row in rows}
+    assert by_request[10]["index_n_positive_actual"] == 10
+    assert by_request[10]["index_n_negative_actual"] == 20
     # Clipped to what the index actually holds, and visible in the row.
-    assert by_request[999]["n_positive_actual"] == 15
-    assert by_request[999]["n_negative_actual"] == 30
+    assert by_request[999]["index_n_positive_actual"] == 15
+    assert by_request[999]["index_n_negative_actual"] == 30
 
 
 def test_grid_search_one_axis_at_a_time():
@@ -369,16 +402,16 @@ def test_grid_search_one_axis_at_a_time():
         index, _two_groups(), top_k_values=[3], min_score_values=[0.0],
         n_positive_values=[10, 20],
     )
-    assert {row["n_positive"] for row in size_only} == {10, 20}
-    assert all(row["neg_to_pos_ratio"] is None for row in size_only)
+    assert {row["index_n_positive"] for row in size_only} == {10, 20}
+    assert all(row["index_neg_to_pos_ratio"] is None for row in size_only)
 
     index2 = _StubSubsamplableIndex()
     ratio_only = run_grid_search(
         index2, _two_groups(), top_k_values=[3], min_score_values=[0.0],
         neg_to_pos_ratios=[0.5, 1.0],
     )
-    assert {row["neg_to_pos_ratio"] for row in ratio_only} == {0.5, 1.0}
-    assert all(row["n_positive"] is None for row in ratio_only)
+    assert {row["index_neg_to_pos_ratio"] for row in ratio_only} == {0.5, 1.0}
+    assert all(row["index_n_positive"] is None for row in ratio_only)
 
 
 def test_grid_search_logs_progress_per_configuration(caplog):
