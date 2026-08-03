@@ -20,38 +20,46 @@ This library provides tools for semantic scoring of text based on contrastive le
 
 from sentinel.sentinel_local_index import SentinelLocalIndex
 from sentinel.score_formulae import (
-	calculate_contrastive_score,
-	skewness,
-	mean_of_positives,
-	top_k_mean,
-	percentile_score,
-	softmax_weighted_mean,
-	max_score,
+    calculate_contrastive_score,
+    skewness,
+    mean_of_positives,
+    top_k_mean,
+    percentile_score,
+    softmax_weighted_mean,
+    max_score,
 )
 from sentinel.simulation import (
-	DEFAULT_AGGREGATORS,
-	LabeledGroup,
-	GroupObservationScores,
-	score_groups,
-	evaluate_groups,
-	compare_aggregators,
-	run_grid_search,
+    DEFAULT_AGGREGATORS,
+    LabeledGroup,
+    GroupObservationScores,
+    encode_observations,
+    score_groups,
+    evaluate_groups,
+    compare_aggregators,
+    run_grid_search,
 )
 
+# Kept in step with the version in pyproject.toml, which is the source of truth for
+# packaging. Duplicated here because importing package metadata at runtime fails when
+# the library is used straight from a source checkout rather than an installed wheel.
+__version__ = "2.0.0"
+
 __all__ = [
-	"SentinelLocalIndex",
-	"calculate_contrastive_score",
-	"skewness",
-	"mean_of_positives",
-	"top_k_mean",
-	"percentile_score",
-	"softmax_weighted_mean",
-	"max_score",
-	"DEFAULT_AGGREGATORS",
-	"LabeledGroup",
-	"GroupObservationScores",
-	"score_groups",
-	"evaluate_groups",
-	"compare_aggregators",
-	"run_grid_search",
+    "__version__",
+    "SentinelLocalIndex",
+    "calculate_contrastive_score",
+    "skewness",
+    "mean_of_positives",
+    "top_k_mean",
+    "percentile_score",
+    "softmax_weighted_mean",
+    "max_score",
+    "DEFAULT_AGGREGATORS",
+    "LabeledGroup",
+    "GroupObservationScores",
+    "encode_observations",
+    "score_groups",
+    "evaluate_groups",
+    "compare_aggregators",
+    "run_grid_search",
 ]

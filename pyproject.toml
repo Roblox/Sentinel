@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "sentinel"
-version = "1.0.0"
+version = "2.0.0"
 description = "A Python library for local, contrastive semantic scoring of text to identify affinity towards predefined critical harm patterns."
 authors = ["Younes Abouelnagah <timeleft--@users.noreply.github.com>"]
 readme = "README.md"
