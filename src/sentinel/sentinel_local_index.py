@@ -39,6 +39,33 @@ from sentinel.score_types import RareClassAffinityResult
 
 LOG = logging.getLogger(__name__)
 
+# Encoding options applied unless the caller overrides them. Normalization is not
+# optional in practice: the similarity maths assumes unit vectors, and getting it
+# wrong produces quietly incorrect scores rather than an error. Defined once so the
+# constructor and from_texts() cannot drift apart.
+DEFAULT_ENCODING_KWARGS: Mapping[str, Any] = {
+    "normalize_embeddings": True,
+}
+
+
+def _validate_texts(name: str, texts: Any) -> None:
+    """Reject the two text-argument mistakes that would otherwise fail quietly.
+
+    Args:
+        name: Argument name, used in the error message.
+        texts: The value supplied by the caller.
+
+    Raises:
+        ValueError: If a bare string was passed instead of a list, or the list is empty.
+    """
+    if isinstance(texts, str):
+        raise ValueError(
+            f"{name} must be a list of strings, not a single string. A bare string is "
+            f"iterable, so it would be encoded one character at a time instead of failing."
+        )
+    if texts is None or len(texts) == 0:
+        raise ValueError(f"{name} must not be empty.")
+
 
 def _corpus_if_aligned(
     name: str, corpus: Optional[List[str]], embeddings: Optional[torch.Tensor]
@@ -100,6 +127,74 @@ def _split_generators(
         torch.Generator().manual_seed(positive_seed),
         torch.Generator().manual_seed(negative_seed),
     )
+
+
+def _choose_indices(
+    available: int,
+    n_keep: Optional[int],
+    generator: Optional[torch.Generator],
+    label: str,
+) -> Optional[torch.Tensor]:
+    """Pick which ``n_keep`` of ``available`` positions to keep, in their original order.
+
+    Only the choice lives here, not what is done with it, because the two callers
+    keep different things: :meth:`SentinelLocalIndex.subsample` selects rows of an
+    existing embedding tensor, while :meth:`SentinelLocalIndex.from_texts` selects
+    raw texts before paying to encode them.
+
+    Args:
+        available: How many positions there are to choose from.
+        n_keep: How many to keep. None, or at least ``available``, keeps everything.
+        generator: Optional seeded generator for a reproducible choice.
+        label: "positive" or "negative", used in log messages.
+
+    Returns:
+        Sorted positions to keep, or None when everything is kept - which lets
+        callers skip the copy entirely rather than rebuild an identical list.
+    """
+    if n_keep is None or n_keep >= available:
+        if n_keep is not None and n_keep > available:
+            LOG.info(
+                "Requested %d %s examples but only %d are available - keeping all of them.",
+                n_keep,
+                label,
+                available,
+            )
+        return None
+
+    indices = torch.randperm(available, generator=generator)[:n_keep]
+    # Order does not affect semantic_search, but keeping the original relative
+    # order makes the result far easier to diff and debug.
+    indices = torch.sort(indices).values
+    LOG.info("Keeping %d %s examples out of %d", n_keep, label, available)
+    return indices
+
+
+def _select_subset(
+    embeddings: torch.Tensor,
+    corpus: Optional[List[str]],
+    n_keep: Optional[int],
+    generator: Optional[torch.Generator],
+    label: str,
+) -> Tuple[torch.Tensor, Optional[List[str]]]:
+    """Randomly keep ``n_keep`` rows of one side of an index, corpus included.
+
+    Args:
+        embeddings: The embeddings to select from.
+        corpus: Matching texts, or None.
+        n_keep: How many rows to keep. None or a value at least as large as the
+            available rows keeps everything.
+        generator: Optional seeded generator for a reproducible choice.
+        label: "positive" or "negative", used in log messages.
+
+    Returns:
+        Tuple of (embeddings, corpus) for the kept rows.
+    """
+    indices = _choose_indices(embeddings.shape[0], n_keep, generator, label)
+    if indices is None:
+        # Copy the corpus list so callers cannot mutate the original through the copy.
+        return embeddings, (list(corpus) if corpus is not None else None)
+    return _take_rows(embeddings, corpus, indices)
 
 
 def _take_rows(
@@ -214,9 +309,7 @@ class SentinelLocalIndex:
             else:
                 self.negative_embeddings = torch.tensor(negative_embeddings)
 
-        self.encoding_kwargs = {
-            "normalize_embeddings": True,
-        }
+        self.encoding_kwargs = dict(DEFAULT_ENCODING_KWARGS)
         self.encoding_kwargs.update(encoding_additional_kwargs)
         self.positive_corpus = positive_corpus
         self.negative_corpus = negative_corpus
@@ -270,6 +363,116 @@ class SentinelLocalIndex:
 
         # Return the config for informational purposes
         return config
+
+    @classmethod
+    def from_texts(
+        cls,
+        positive_texts: List[str],
+        negative_texts: List[str],
+        model_name: str = "all-MiniLM-L6-v2",
+        neg_to_pos_ratio: Optional[float] = None,
+        batch_size: int = 256,
+        seed: Optional[int] = None,
+        encoding_additional_kwargs: Optional[Mapping[str, Any]] = None,
+        model_card: Optional[Mapping[str, Any]] = None,
+        show_progress_bar: bool = False,
+    ) -> "SentinelLocalIndex":
+        """Build an index from raw text in one call.
+
+        Doing this by hand takes eight steps, two of which fail *silently* when
+        skipped: omit ``normalize_embeddings=True`` and the similarity maths quietly
+        returns wrong numbers, and omit the corpus and you lose explanations. No
+        crash, no warning. Performing those steps inside the library, where they are
+        tested, means a caller cannot forget a step they never have to write.
+
+        Args:
+            positive_texts: Examples of the rare class to detect.
+            negative_texts: Examples of ordinary, common-class content.
+            model_name: Sentence transformer to encode with.
+            neg_to_pos_ratio: Optional negatives-to-positives ratio. None keeps every
+                negative given. Surplus negatives are dropped before encoding, so
+                passing far more than the ratio needs costs little.
+            batch_size: Encoding batch size.
+            seed: Optional seed for the negative downsampling, so the resulting index
+                is reproducible.
+            encoding_additional_kwargs: Extra encoding options, merged over
+                :data:`DEFAULT_ENCODING_KWARGS`.
+            model_card: Optional metadata describing where the examples came from.
+            show_progress_bar: Whether to show the encoder progress bar.
+
+        Returns:
+            A ready-to-use SentinelLocalIndex, corpus included.
+
+        Raises:
+            ValueError: If either text list is empty, if a bare string is passed where
+                a list is expected, or if neg_to_pos_ratio is not positive.
+        """
+        _validate_texts("positive_texts", positive_texts)
+        _validate_texts("negative_texts", negative_texts)
+        if neg_to_pos_ratio is not None and neg_to_pos_ratio <= 0:
+            raise ValueError(
+                f"neg_to_pos_ratio must be positive, got {neg_to_pos_ratio}."
+            )
+
+        positive_corpus = list(positive_texts)
+        negative_corpus = list(negative_texts)
+
+        # Keep both return values: dropping scale_fn silently changes scores for
+        # models like E5, with nothing to indicate anything went wrong.
+        sentence_model, scale_fn = get_sentence_transformer_and_scaling_fn(model_name)
+
+        encoding_kwargs = dict(DEFAULT_ENCODING_KWARGS)
+        encoding_kwargs.update(encoding_additional_kwargs or {})
+
+        # Drop the surplus negatives before encoding, not after. Encoding is the only
+        # expensive step here, and it is per-text, so encoding a sentence and then
+        # discarding it is pure waste: at a 1:1 ratio against 1,000 positives, a
+        # caller passing 100,000 negatives would have paid to encode 99,000 rows
+        # that never reach the index.
+        if neg_to_pos_ratio is not None:
+            n_keep = max(1, int(len(positive_corpus) * neg_to_pos_ratio))
+            generator = (
+                torch.Generator().manual_seed(seed) if seed is not None else None
+            )
+            indices = _choose_indices(
+                len(negative_corpus), n_keep, generator, "negative"
+            )
+            if indices is not None:
+                negative_corpus = [negative_corpus[i] for i in indices.tolist()]
+
+        LOG.info(
+            "Encoding %d positive and %d negative examples with %s",
+            len(positive_corpus),
+            len(negative_corpus),
+            model_name,
+        )
+        positive_embeddings = torch.tensor(
+            sentence_model.encode(
+                positive_corpus,
+                batch_size=batch_size,
+                show_progress_bar=show_progress_bar,
+                **encoding_kwargs,
+            )
+        )
+        negative_embeddings = torch.tensor(
+            sentence_model.encode(
+                negative_corpus,
+                batch_size=batch_size,
+                show_progress_bar=show_progress_bar,
+                **encoding_kwargs,
+            )
+        )
+
+        return cls(
+            sentence_model=sentence_model,
+            positive_embeddings=positive_embeddings,
+            negative_embeddings=negative_embeddings,
+            scale_fn=scale_fn,
+            encoding_additional_kwargs=encoding_kwargs,
+            positive_corpus=positive_corpus,
+            negative_corpus=negative_corpus,
+            model_card=model_card,
+        )
 
     @classmethod
     def load(
@@ -429,47 +632,6 @@ class SentinelLocalIndex:
                 self.negative_embeddings.shape[0],
             )
 
-    def _select_subset(
-        self,
-        embeddings: torch.Tensor,
-        corpus: Optional[List[str]],
-        n_keep: Optional[int],
-        generator: Optional[torch.Generator],
-        label: str,
-    ) -> Tuple[torch.Tensor, Optional[List[str]]]:
-        """Randomly keep n_keep rows of one side of the index, corpus included.
-
-        Args:
-            embeddings: The embeddings to select from.
-            corpus: Matching texts, or None.
-            n_keep: How many rows to keep. None or a value at least as large as the
-                available rows keeps everything.
-            generator: Optional seeded generator for a reproducible choice.
-            label: "positive" or "negative", used in log messages.
-
-        Returns:
-            Tuple of (embeddings, corpus) for the kept rows.
-        """
-        available = embeddings.shape[0]
-
-        if n_keep is None or n_keep >= available:
-            if n_keep is not None and n_keep > available:
-                LOG.info(
-                    "Requested %d %s examples but the index only has %d - keeping all of them.",
-                    n_keep,
-                    label,
-                    available,
-                )
-            # Copy the corpus list so callers cannot mutate the original through the copy.
-            return embeddings, (list(corpus) if corpus is not None else None)
-
-        indices = torch.randperm(available, generator=generator)[:n_keep]
-        # Order does not affect semantic_search, but keeping the original relative
-        # order makes the result far easier to diff and debug.
-        indices = torch.sort(indices).values
-        LOG.info("Keeping %d %s examples out of %d", n_keep, label, available)
-        return _take_rows(embeddings, corpus, indices)
-
     def subsample(
         self,
         n_positive: Optional[int] = None,
@@ -523,7 +685,7 @@ class SentinelLocalIndex:
 
         # Positives first: the ratio is defined relative to how many positives survive,
         # so that count has to be settled before the negatives can be sized.
-        positive_embeddings, positive_corpus = self._select_subset(
+        positive_embeddings, positive_corpus = _select_subset(
             self.positive_embeddings,
             self.positive_corpus,
             n_positive,
@@ -543,7 +705,7 @@ class SentinelLocalIndex:
                 )
                 n_negative = 1
 
-        negative_embeddings, negative_corpus = self._select_subset(
+        negative_embeddings, negative_corpus = _select_subset(
             self.negative_embeddings,
             self.negative_corpus,
             n_negative,
