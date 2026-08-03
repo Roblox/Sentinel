@@ -19,6 +19,7 @@ pure metric logic directly on hand-crafted scores, or use a tiny stub index
 that mimics ``calculate_rare_class_affinity``.
 """
 
+import logging
 from types import SimpleNamespace
 
 import numpy as np
@@ -259,3 +260,168 @@ def test_run_grid_search_rescoring_and_rows():
     # Re-scoring happens once per top_k value (each scores both groups), and NOT
     # again for every threshold/aggregator combination: 2 top_k x 2 groups = 4.
     assert len(index.calls) == 2 * len(groups)
+
+
+class _StubSubsamplableIndex(_StubIndex):
+    """Stub that also records subsample() calls and reports embedding row counts."""
+
+    def __init__(self, n_positive=100, n_negative=500):
+        super().__init__()
+        self.subsample_calls = []
+        self.positive_embeddings = np.zeros((n_positive, 4))
+        self.negative_embeddings = np.zeros((n_negative, 4))
+
+    def subsample(self, n_positive=None, neg_to_pos_ratio=None, seed=None):
+        self.subsample_calls.append(
+            {"n_positive": n_positive, "neg_to_pos_ratio": neg_to_pos_ratio, "seed": seed}
+        )
+        available_positive = self.positive_embeddings.shape[0]
+        kept_positive = (
+            min(n_positive, available_positive) if n_positive else available_positive
+        )
+        kept_negative = (
+            min(int(kept_positive * neg_to_pos_ratio), self.negative_embeddings.shape[0])
+            if neg_to_pos_ratio
+            else self.negative_embeddings.shape[0]
+        )
+        smaller = _StubSubsamplableIndex(kept_positive, kept_negative)
+        # Share the call log so assertions can see scoring done via the copy.
+        smaller.calls = self.calls
+        return smaller
+
+
+def _two_groups():
+    return [
+        LabeledGroup(name="pos", label=1, observations=["0.9", "0.8"]),
+        LabeledGroup(name="neg", label=0, observations=["0.2", "0.1"]),
+    ]
+
+
+def test_grid_search_without_index_axes_never_subsamples():
+    """The default path must not touch the index at all.
+
+    This is the backward-compatibility guarantee: callers passing any index-like
+    object keep working, and behaviour is unchanged from before these axes existed.
+    """
+    index = _StubSubsamplableIndex()
+    rows = run_grid_search(index, _two_groups(), top_k_values=[3], min_score_values=[0.1])
+
+    assert index.subsample_calls == []
+    assert len(rows) == len(DEFAULT_AGGREGATORS)
+    # The new columns are still present, so the table shape is consistent.
+    assert all(row["index_n_positive"] is None for row in rows)
+    assert all(row["index_neg_to_pos_ratio"] is None for row in rows)
+
+
+def test_grid_search_keeps_evaluate_groups_n_positive():
+    """The index columns must not overwrite evaluate_groups' own metadata.
+
+    ``n_positive`` there means "how many evaluation groups are positive", which is
+    unrelated to the index size the sweep varies. An unprefixed index column landed
+    on that key and replaced a real count with the requested size - or with None on
+    the default path, where no size is requested at all.
+    """
+    groups = _two_groups()  # one positive group, one negative
+    rows = run_grid_search(
+        _StubSubsamplableIndex(),
+        groups,
+        top_k_values=[3],
+        min_score_values=[0.0],
+    )
+
+    assert all(row["n_positive"] == 1 for row in rows)
+    assert all(row["n_groups"] == 2 for row in rows)
+
+    # Still true once the index axes are actually in use.
+    swept = run_grid_search(
+        _StubSubsamplableIndex(),
+        groups,
+        top_k_values=[3],
+        min_score_values=[0.0],
+        n_positive_values=[10],
+        neg_to_pos_ratios=[2.0],
+    )
+
+    assert all(row["n_positive"] == 1 for row in swept)
+    assert all(row["index_n_positive"] == 10 for row in swept)
+
+
+def test_grid_search_sweeps_index_size_and_ratio():
+    """Both new axes multiply out, and each configuration is subsampled once."""
+    index = _StubSubsamplableIndex()
+    rows = run_grid_search(
+        index,
+        _two_groups(),
+        top_k_values=[3, 5],
+        min_score_values=[0.0],
+        n_positive_values=[10, 20],
+        neg_to_pos_ratios=[1.0, 2.0],
+        index_seed=42,
+    )
+
+    # 2 sizes x 2 ratios x 2 top_k x 1 threshold x 6 aggregators.
+    assert len(rows) == 2 * 2 * 2 * len(DEFAULT_AGGREGATORS)
+    # subsample() is called once per (size, ratio) pair, NOT once per top_k: the
+    # whole point is that reshaping the index is cheap and re-scoring is not.
+    assert len(index.subsample_calls) == 4
+    assert all(call["seed"] == 42 for call in index.subsample_calls)
+    assert {(c["n_positive"], c["neg_to_pos_ratio"]) for c in index.subsample_calls} == {
+        (10, 1.0), (10, 2.0), (20, 1.0), (20, 2.0)
+    }
+    # Scoring happens once per (size, ratio, top_k), each covering both groups.
+    assert len(index.calls) == 4 * 2 * len(_two_groups())
+
+
+def test_grid_search_reports_requested_and_actual_counts():
+    """Actual counts are emitted, because a request is clipped on a small index.
+
+    Without them, two rows can look identical while describing different indices.
+    """
+    index = _StubSubsamplableIndex(n_positive=15, n_negative=500)
+    rows = run_grid_search(
+        index,
+        _two_groups(),
+        top_k_values=[3],
+        min_score_values=[0.0],
+        n_positive_values=[10, 999],  # 999 exceeds the 15 available
+        neg_to_pos_ratios=[2.0],
+    )
+
+    by_request = {row["index_n_positive"]: row for row in rows}
+    assert by_request[10]["index_n_positive_actual"] == 10
+    assert by_request[10]["index_n_negative_actual"] == 20
+    # Clipped to what the index actually holds, and visible in the row.
+    assert by_request[999]["index_n_positive_actual"] == 15
+    assert by_request[999]["index_n_negative_actual"] == 30
+
+
+def test_grid_search_one_axis_at_a_time():
+    """Either axis can be swept on its own."""
+    index = _StubSubsamplableIndex()
+    size_only = run_grid_search(
+        index, _two_groups(), top_k_values=[3], min_score_values=[0.0],
+        n_positive_values=[10, 20],
+    )
+    assert {row["index_n_positive"] for row in size_only} == {10, 20}
+    assert all(row["index_neg_to_pos_ratio"] is None for row in size_only)
+
+    index2 = _StubSubsamplableIndex()
+    ratio_only = run_grid_search(
+        index2, _two_groups(), top_k_values=[3], min_score_values=[0.0],
+        neg_to_pos_ratios=[0.5, 1.0],
+    )
+    assert {row["index_neg_to_pos_ratio"] for row in ratio_only} == {0.5, 1.0}
+    assert all(row["index_n_positive"] is None for row in ratio_only)
+
+
+def test_grid_search_logs_progress_per_configuration(caplog):
+    """A long sweep logs progress so it cannot be mistaken for a hang."""
+    caplog.set_level(logging.INFO)
+    index = _StubSubsamplableIndex()
+    run_grid_search(
+        index, _two_groups(), top_k_values=[3], min_score_values=[0.0],
+        n_positive_values=[10, 20], neg_to_pos_ratios=[1.0],
+    )
+
+    assert "index configuration 1/2" in caplog.text
+    assert "index configuration 2/2" in caplog.text
