@@ -15,11 +15,27 @@
 """Tests for SentinelLocalIndex.from_texts()."""
 
 import tempfile
+import numpy as np
 import pytest
 import torch
 
 from sentinel.sentinel_local_index import SentinelLocalIndex
 from sentinel.score_types import RareClassAffinityResult
+
+
+class _SpyModel:
+    """Stands in for a sentence transformer, recording what it was asked to encode.
+
+    Encoding is the only expensive step in from_texts, so what reaches this stub is
+    exactly what a real run would pay for.
+    """
+
+    def __init__(self):
+        self.encoded = []
+
+    def encode(self, texts, **kwargs):
+        self.encoded.append(list(texts))
+        return np.zeros((len(texts), 4), dtype=np.float32)
 
 
 class TestFromTexts:
@@ -133,6 +149,53 @@ class TestFromTexts:
 
         assert reloaded.positive_corpus == self.POSITIVE
         assert reloaded.negative_corpus == self.NEGATIVE
+
+    def _spy_model(self, monkeypatch):
+        """Swap the real encoder for a spy, and hand the spy back."""
+        spy = _SpyModel()
+        monkeypatch.setattr(
+            "sentinel.sentinel_local_index.get_sentence_transformer_and_scaling_fn",
+            lambda *args, **kwargs: (spy, None),
+        )
+        return spy
+
+    def test_surplus_negatives_are_never_encoded(self, monkeypatch):
+        """The ratio must be applied before encoding, not after.
+
+        Encoding is per-text and is the only expensive step, so encoding a negative
+        and then discarding it is pure waste. At a 1:1 ratio against 3 positives,
+        only 3 of the 50 negatives belong in the index, so only 3 should ever reach
+        the encoder.
+        """
+        spy = self._spy_model(monkeypatch)
+        positives = ["p0", "p1", "p2"]
+        negatives = [f"n{i}" for i in range(50)]
+
+        index = SentinelLocalIndex.from_texts(
+            positive_texts=positives,
+            negative_texts=negatives,
+            neg_to_pos_ratio=1.0,
+            seed=42,
+        )
+
+        assert [len(call) for call in spy.encoded] == [3, 3]
+        assert spy.encoded[0] == positives
+        # Everything encoded ended up in the index, and vice versa: nothing was
+        # paid for and thrown away.
+        assert spy.encoded[1] == index.negative_corpus
+
+    def test_without_a_ratio_every_negative_is_encoded(self, monkeypatch):
+        """Reordering the downsample must not change the no-ratio path."""
+        spy = self._spy_model(monkeypatch)
+        negatives = [f"n{i}" for i in range(20)]
+
+        index = SentinelLocalIndex.from_texts(
+            positive_texts=["p0", "p1"],
+            negative_texts=negatives,
+        )
+
+        assert spy.encoded[1] == negatives
+        assert index.negative_corpus == negatives
 
     @pytest.mark.parametrize(
         "kwargs,message",
