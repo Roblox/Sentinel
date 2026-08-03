@@ -187,6 +187,38 @@ for message, ex in result.explanations.items():
 ## Creating a New Index
 
 ```python
+from sentinel.sentinel_local_index import SentinelLocalIndex
+
+index = SentinelLocalIndex.from_texts(
+    positive_texts=["rare class example", "critical content example"],
+    negative_texts=["common class example", "typical content"],
+    model_name="all-MiniLM-L6-v2",
+)
+
+index.save(path="path/to/local/index", encoder_model_name_or_path="all-MiniLM-L6-v2")
+```
+
+`from_texts` encodes both sides, keeps the corpus so explanations can name real
+sentences, and applies the correct encoding options. It optionally downsamples the
+negatives for you:
+
+```python
+index = SentinelLocalIndex.from_texts(
+    positive_texts=positive_texts,
+    negative_texts=negative_texts,
+    neg_to_pos_ratio=5.0,   # keep 5 negatives per positive
+    seed=42,                # ...reproducibly
+)
+```
+
+### Advanced: building an index manually
+
+Use this if you need custom encoding — a different embedding backend, precomputed
+vectors, or non-standard encoding arguments. Two steps here fail *silently* if you
+skip them: without `normalize_embeddings=True` the similarity maths returns wrong
+numbers, and without the corpus you lose explanations. Neither raises an error.
+
+```python
 import torch
 from sentinel.sentinel_local_index import SentinelLocalIndex
 from sentinel.embeddings.sbert import get_sentence_transformer_and_scaling_fn
@@ -343,18 +375,23 @@ Sentinel supports both local file storage and S3 storage:
 
 The storage is abstracted using `smart_open`, making it seamless to switch between storage backends.
 
-A saved index is a directory of up to three files:
+A saved index is a directory of three files:
 
 | File | Contents |
 |------|----------|
 | `sentinel_local_index_config.json` | Encoder model name, encoding kwargs, model card |
 | `embeddings.safetensors` | The positive and negative embedding tensors |
-| `corpus.json` | The original texts behind those embeddings — **optional** |
+| `corpus.json` | The original texts behind those embeddings — contents **optional** |
 
-`corpus.json` is written whenever the index has a corpus, and it is what lets
-explanations name the matched sentence after a reload. Without it, `explanations`
-falls back to reporting the row number of the match instead of its text. Indices
-saved before this file existed simply lack it and continue to load normally.
+`corpus.json` is what lets explanations name the matched sentence after a reload.
+Without those texts, `explanations` falls back to reporting the row number of the
+match instead of its text.
+
+The file itself is always written, holding nulls when the index has no corpus, so
+that it always describes the embeddings saved beside it. Saving an index without a
+corpus therefore clears any corpus already at that path, rather than leaving
+behind texts that describe rows which no longer exist. Indices saved before this
+file existed simply lack it and continue to load normally.
 
 ## Examples
 To run the notebook examples
