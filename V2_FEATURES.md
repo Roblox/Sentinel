@@ -5,15 +5,22 @@ hand-building the index, guessing at hyperparameters, and re-encoding your corpu
 time you wanted to try something different.
 
 Version 2.0 is about closing that loop: build an index in one call, resize it without
-re-encoding, sweep the settings that matter, and see which text actually drove a score.
+re-encoding, measure which settings actually work, and see which text drove a score.
 
-- [Build an index in one call](#build-an-index-in-one-call)
-- [Resize an index without re-encoding](#resize-an-index-without-re-encoding)
-- [Tune with the simulation harness](#tune-with-the-simulation-harness)
-- [Sweep index size and ratio](#sweep-index-size-and-ratio)
-- [Explanations survive a reload](#explanations-survive-a-reload)
-- [Reproducible loading](#reproducible-loading)
-- [Migrating from 1.0](#migrating-from-10)
+The main changes:
+
+| | |
+|---|---|
+| [One-line index building](#build-an-index-in-one-call) | `from_texts()` replaces an eight-step recipe with two silent failure modes |
+| [Resizing without re-encoding](#resize-an-index-without-re-encoding) | `subsample()` makes index size an affordable thing to explore |
+| [Six summarize metrics, not two](#more-ways-to-summarize-and-ways-to-measure-which-one-works) | Plus explainability, and the evaluation metrics to choose between them |
+| [A tuning harness](#tune-with-the-simulation-harness) | Measure configurations on your own labelled data, numpy-only |
+| [Index sweep axes](#sweep-index-size-and-ratio) | Grid search over index size and balance, encoding the observations once |
+| [Explanations that survive a reload](#explanations-survive-a-reload) | The corpus is persisted, so explanations name text rather than row numbers |
+| [Reproducible loading](#reproducible-loading) | A saved index behaves identically on every load |
+| [Run it in a container](#run-it-in-a-container) | Dockerfiles for GPU and CPU-only use |
+
+Migration notes are at the end: [Migrating from 1.0](#migrating-from-10).
 
 ## Build an index in one call
 
@@ -92,11 +99,58 @@ scored = score_groups(index, groups, top_k=5)     # expensive, once
 pd.DataFrame(compare_aggregators(scored))          # cheap, all six aggregators
 ```
 
-Every row carries all three families:
+## More ways to summarize, and ways to measure which one works
 
-- Ranking: `roc_auc`, `recall_at_n`, `precision_at_n`, `rank_ratio`
-- Threshold: `precision`, `recall`, `f1`, `false_positive_rate`
-- Separation: `mean_separation`, `cohens_d`, `ks_statistic`
+1.0 gave you two summarize metrics: `mean_of_positives` and `skewness`. That is not much of
+a choice, and no way at all to know whether either suited your data.
+
+2.0 brings the count to six and adds the means to decide between them.
+
+**Four new summarize metrics** in `sentinel.score_formulae`, alongside the original two:
+
+| Metric | Shape it looks for |
+|---|---|
+| `skewness` (default) | A few spikes in an otherwise flat set of scores, regardless of count |
+| `mean_of_positives` | Overall level among scores that cleared the floor |
+| `top_k_mean` | The strongest handful of signals |
+| `percentile_score` | A high percentile, robust to single outliers |
+| `softmax_weighted_mean` | Smoothly emphasises higher scores |
+| `max_score` | The single strongest signal |
+
+**Explainability on every result.** `RareClassAffinityResult` now carries
+`aggregation_name`, `aggregation_stats` and per-text `explanations` - which neighbours were
+closest, their similarities, and the contrastive terms behind the score. You can see *why* a
+source scored as it did, not just that it did.
+
+**Evaluation metrics.** Three families, reported on every result row, because "good" depends
+on what you are building:
+
+| Family | Metrics | Answers |
+|---|---|---|
+| Ranking | `roc_auc`, `recall_at_n`, `precision_at_n`, `rank_ratio` | Do the known positives come out on top? Right for a review queue. |
+| Threshold | `precision`, `recall`, `f1`, `false_positive_rate` | Of the sources I flagged, how many were right? Right for automatic action. |
+| Separation | `mean_separation`, `cohens_d`, `ks_statistic` | How far apart are the two populations, independent of any cutoff? Right for monitoring drift. |
+
+You do not pick a family. All three are computed, so you read whichever matches your use
+case - and you can see when they disagree, which they do: an aggregator can rank well while
+having a mediocre best F1.
+
+**A way to compare them side by side.** `DEFAULT_AGGREGATORS` is a name-to-function map of
+all six, so `compare_aggregators` can evaluate every one of them on a single set of scores,
+and `evaluate_groups` can measure any one of them on its own:
+
+```python
+from sentinel.simulation import DEFAULT_AGGREGATORS, compare_aggregators, evaluate_groups
+
+# All six, ranked however you like.
+pd.DataFrame(compare_aggregators(scored)).sort_values("roc_auc", ascending=False)
+
+# Or one at a time, with all three families reported.
+evaluate_groups(scored, DEFAULT_AGGREGATORS["skewness"], aggregator_name="skewness")
+```
+
+This is what turns six options into a decision you can defend with evidence rather than a
+default you inherited.
 
 ## Sweep index size and ratio
 
@@ -172,6 +226,19 @@ index = SentinelLocalIndex.load(path="...", seed=42)
 ```
 
 Seeding uses a private generator, so your own randomness is untouched.
+
+## Run it in a container
+
+2.0 ships Dockerfiles, so you can try Sentinel without resolving a Python and PyTorch
+environment first. There are two: the default is GPU-capable, and `Dockerfile.cpu` is a
+smaller CPU-only build for when you are only scoring.
+
+```bash
+docker build -t sentinel .                       # GPU-capable
+docker build -f Dockerfile.cpu -t sentinel:cpu . # smaller, CPU only
+```
+
+See the README for running the demo and mounting your own scripts.
 
 ## Migrating from 1.0
 
