@@ -30,7 +30,9 @@ from sentinel.simulation import (
     DEFAULT_AGGREGATORS,
     GroupObservationScores,
     LabeledGroup,
+    _add_columns,
     compare_aggregators,
+    encode_observations,
     evaluate_groups,
     run_grid_search,
     score_groups,
@@ -295,6 +297,207 @@ def _two_groups():
         LabeledGroup(name="pos", label=1, observations=["0.9", "0.8"]),
         LabeledGroup(name="neg", label=0, observations=["0.2", "0.1"]),
     ]
+
+
+class _SpyEncoder:
+    """Sentence model stand-in that counts how many texts it was asked to encode."""
+
+    def __init__(self):
+        self.encoded_batches = []
+
+    def encode(self, texts, **kwargs):
+        self.encoded_batches.append(list(texts))
+        # The observation text doubles as its score elsewhere in these tests, so keep
+        # the embedding trivially derived from it to stay debuggable.
+        return np.array([[float(t)] * 4 for t in texts], dtype=float)
+
+
+class _EncodingStubIndex(_StubSubsamplableIndex):
+    """Stub that can pre-encode, so the caching path can be exercised without a model."""
+
+    def __init__(self, n_positive=100, n_negative=500, encoder=None):
+        super().__init__(n_positive, n_negative)
+        self.sentence_model = encoder if encoder is not None else _SpyEncoder()
+        self.encoding_kwargs = {"normalize_embeddings": True}
+
+    def calculate_rare_class_affinity(self, text_samples, sample_embeddings=None, **kwargs):
+        # Record whether this pass was handed cached embeddings, so a test can assert
+        # the cache is actually reaching the scorer rather than being dropped.
+        self.calls.append({**kwargs, "used_cache": sample_embeddings is not None})
+        if sample_embeddings is None:
+            self.sentence_model.encode(text_samples)
+        observation_scores = {text: float(text) for text in text_samples}
+        return SimpleNamespace(observation_scores=observation_scores)
+
+    def subsample(self, n_positive=None, neg_to_pos_ratio=None, seed=None):
+        smaller = super().subsample(
+            n_positive=n_positive, neg_to_pos_ratio=neg_to_pos_ratio, seed=seed
+        )
+        # A real subsample() shares the parent's model, which is exactly why one set of
+        # observation embeddings stays valid across a whole sweep.
+        rebuilt = _EncodingStubIndex(
+            smaller.positive_embeddings.shape[0],
+            smaller.negative_embeddings.shape[0],
+            encoder=self.sentence_model,
+        )
+        rebuilt.calls = self.calls
+        rebuilt.subsample_calls = self.subsample_calls
+        return rebuilt
+
+
+def _rows_equal(left, right):
+    """Compare result rows, treating NaN as equal to NaN.
+
+    Some metrics are legitimately NaN on small fixtures (Cohen's d needs spread within
+    a class), and NaN never equals itself, so a plain ``==`` would report a difference
+    where none exists.
+    """
+    if len(left) != len(right):
+        return False
+    for row_a, row_b in zip(left, right):
+        if row_a.keys() != row_b.keys():
+            return False
+        for key in row_a:
+            a, b = row_a[key], row_b[key]
+            both_nan = (
+                isinstance(a, float)
+                and isinstance(b, float)
+                and np.isnan(a)
+                and np.isnan(b)
+            )
+            if not both_nan and a != b:
+                return False
+    return True
+
+
+class TestObservationEmbeddingCache:
+    """Encoding observations once and reusing them across scoring passes."""
+
+    def test_encoder_runs_once_regardless_of_sweep_size(self):
+        """The whole point: encoding cost stops scaling with the number of passes.
+
+        An observation's embedding depends on the encoder, never on the index it is
+        scored against, so a sweep that re-encodes per pass is recomputing identical
+        numbers.
+        """
+        index = _EncodingStubIndex()
+        run_grid_search(
+            index,
+            _two_groups(),
+            n_positive_values=[10, 20],
+            neg_to_pos_ratios=[1.0, 2.0],
+            top_k_values=[3, 5],
+            min_score_values=[0.0],
+        )
+
+        # 2 sizes x 2 ratios x 2 top_k = 8 scoring passes over 2 groups.
+        assert len(index.calls) == 8 * len(_two_groups())
+        assert all(call["used_cache"] for call in index.calls)
+        # But only one encode per group, up front.
+        assert len(index.sentence_model.encoded_batches) == len(_two_groups())
+
+    def test_disabling_the_cache_encodes_every_pass(self):
+        """The opt-out still works, for callers who cannot spare the memory."""
+        index = _EncodingStubIndex()
+        run_grid_search(
+            index,
+            _two_groups(),
+            top_k_values=[3, 5],
+            min_score_values=[0.0],
+            cache_observation_embeddings=False,
+        )
+
+        assert not any(call["used_cache"] for call in index.calls)
+        assert len(index.sentence_model.encoded_batches) == 2 * len(_two_groups())
+
+    def test_cached_and_uncached_results_are_identical(self):
+        """Caching is an optimisation, so it must not change a single number."""
+        groups = [
+            LabeledGroup(name="pos_a", label=1, observations=["0.9", "0.8"]),
+            LabeledGroup(name="pos_b", label=1, observations=["0.85", "0.7"]),
+            LabeledGroup(name="neg_a", label=0, observations=["0.2", "0.1"]),
+            LabeledGroup(name="neg_b", label=0, observations=["0.15", "0.05"]),
+        ]
+        kwargs = dict(
+            n_positive_values=[10, 20],
+            neg_to_pos_ratios=[1.0],
+            top_k_values=[3, 5],
+            min_score_values=[0.0, 0.1],
+            index_seed=42,
+        )
+        cached = run_grid_search(
+            _EncodingStubIndex(), groups, cache_observation_embeddings=True, **kwargs
+        )
+        uncached = run_grid_search(
+            _EncodingStubIndex(), groups, cache_observation_embeddings=False, **kwargs
+        )
+
+        # Guards against the comparison passing vacuously if everything were NaN.
+        assert cached and all(not np.isnan(row["roc_auc"]) for row in cached)
+        assert _rows_equal(cached, uncached)
+
+    def test_index_without_an_encoder_still_runs(self):
+        """Index-like objects that cannot pre-encode fall back instead of failing.
+
+        This harness deliberately accepts test doubles that only implement
+        calculate_rare_class_affinity, so the optimisation has to be skippable.
+        """
+        index = _StubSubsamplableIndex()  # no sentence_model at all
+        rows = run_grid_search(
+            index, _two_groups(), top_k_values=[3], min_score_values=[0.0]
+        )
+
+        assert encode_observations(index, _two_groups()) == {}
+        assert len(rows) == len(DEFAULT_AGGREGATORS)
+
+    def test_score_groups_accepts_precomputed_embeddings(self):
+        """The embeddings can also be reused directly, without a grid search."""
+        index = _EncodingStubIndex()
+        groups = _two_groups()
+        embeddings = encode_observations(index, groups)
+
+        assert set(embeddings) == {"pos", "neg"}
+        index.sentence_model.encoded_batches.clear()
+
+        scored = score_groups(index, groups, top_k=3, observation_embeddings=embeddings)
+
+        assert [s.name for s in scored] == ["pos", "neg"]
+        assert index.sentence_model.encoded_batches == []
+
+
+class TestResultColumnCollisions:
+    """A second write to one column used to destroy the first, silently."""
+
+    def test_adding_an_existing_column_raises(self):
+        row = {"n_positive": 2}
+        with pytest.raises(ValueError, match="n_positive"):
+            _add_columns(row, n_positive=10)
+        # The original value survives the refusal.
+        assert row["n_positive"] == 2
+
+    def test_adding_new_columns_succeeds(self):
+        row = {"roc_auc": 0.9}
+        _add_columns(row, top_k=5, index_n_positive=10)
+        assert row == {"roc_auc": 0.9, "top_k": 5, "index_n_positive": 10}
+
+    def test_rows_still_expand_into_one_column_each(self):
+        """Rows stay plain dicts so pd.DataFrame(rows) keeps working as documented."""
+        pd = pytest.importorskip("pandas")
+        rows = run_grid_search(
+            _EncodingStubIndex(),
+            _two_groups(),
+            top_k_values=[3],
+            min_score_values=[0.0],
+            n_positive_values=[10],
+        )
+
+        frame = pd.DataFrame(rows)
+        assert len(frame) == len(rows)
+        for column in ("n_positive", "index_n_positive", "index_n_positive_actual"):
+            assert column in frame.columns
+        # The evaluation metadata and the index size remain distinct columns.
+        assert frame["n_positive"].tolist() == [1] * len(rows)
+        assert frame["index_n_positive"].tolist() == [10] * len(rows)
 
 
 def test_grid_search_without_index_axes_never_subsamples():

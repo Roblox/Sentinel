@@ -197,6 +197,42 @@ class TestFromTexts:
         assert spy.encoded[1] == negatives
         assert index.negative_corpus == negatives
 
+    @pytest.mark.integration
+    def test_precomputed_embeddings_match_encoding_inline(self):
+        """Passing embeddings must score identically to letting the index encode.
+
+        This is what lets a sweep encode once and reuse the result: the embeddings
+        depend on the encoder, not on the index they are scored against.
+        """
+        index = SentinelLocalIndex.from_texts(
+            positive_texts=self.POSITIVE,
+            negative_texts=self.NEGATIVE,
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+        )
+        texts = ["harmful unsafe behavior", "normal regular activity"]
+
+        inline = index.calculate_rare_class_affinity(texts)
+        precomputed = index.calculate_rare_class_affinity(
+            texts,
+            index.sentence_model.encode(texts, **index.encoding_kwargs),
+        )
+
+        assert precomputed.observation_scores == inline.observation_scores
+
+    @pytest.mark.integration
+    def test_mismatched_embeddings_raise(self):
+        """Too few embeddings would pair observations with the wrong vectors."""
+        index = SentinelLocalIndex.from_texts(
+            positive_texts=self.POSITIVE,
+            negative_texts=self.NEGATIVE,
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+        )
+        texts = ["one", "two", "three"]
+        too_few = index.sentence_model.encode(texts[:2], **index.encoding_kwargs)
+
+        with pytest.raises(ValueError, match="sample_embeddings has 2 rows"):
+            index.calculate_rare_class_affinity(texts, too_few)
+
     @pytest.mark.parametrize(
         "kwargs,message",
         [

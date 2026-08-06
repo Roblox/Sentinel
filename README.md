@@ -1,5 +1,6 @@
 # Sentinel
 
+**Version 2.0** — see [V2_FEATURES.md](V2_FEATURES.md) for what changed and how to migrate.
 
 ## Overview
 
@@ -11,9 +12,26 @@ Roblox Sentinel, part of the Roblox Safety Toolkit, is a Python library designed
 
 By prioritizing recall over precision, Sentinel serves as a high-recall candidate generator for more thorough investigation. This approach is particularly effective for applications where rare patterns are critical to identify. Rather than treating each message in isolation, Sentinel analyzes patterns across messages to identify concerning behavior.
 
-## What’s New: Aggregation options and Explainability
+## What's new in 2.0
 
-Sentinel now includes multiple aggregation strategies and built‑in explainability to help you tune for your use case and understand why a score was assigned.
+Version 1.0 gave you an index and a score. Getting a *good* score still meant
+hand-building the index, guessing at hyperparameters, and re-encoding your corpus every
+time you wanted to try something different. 2.0 closes that loop:
+
+| | |
+|---|---|
+| [`from_texts()`](#creating-a-new-index) | Build an index in one call, instead of an eight-step recipe where two steps fail silently if skipped |
+| [`subsample()`](#resizing-an-index) | Resize an index without re-encoding — a 3x3 grid in 9 ms rather than 12.5 s |
+| [`sentinel.simulation`](#simulation-based-tuning) | Measure which aggregator and hyperparameters suit your data |
+| [Index sweeps](#simulation-based-tuning) | Grid search over index size and negative ratio, encoding the observations only once |
+| [Persisted corpus](#storage-options) | Explanations name the matched sentence after a reload, not a row number |
+| [Seeded loading](#quick-start) | A saved index behaves identically on every load |
+
+Full detail and migration notes: [V2_FEATURES.md](V2_FEATURES.md).
+
+### Aggregation options and explainability
+
+Sentinel includes multiple aggregation strategies and built‑in explainability to help you tune for your use case and understand why a score was assigned.
 
 - Aggregators (in `sentinel.score_formulae`):
     - `skewness(scores, min_size_of_scores=10)`: default, pattern‑oriented and robust to message count
@@ -260,6 +278,23 @@ saved_config = index.save(
 )
 ```
 
+## Resizing an index
+
+Encoding a sentence produces the same numbers regardless of which index it ends up in,
+so a small index is just a large one with rows removed. `subsample()` copies the rows you
+want rather than re-running the model, which is what makes sweeping index size
+affordable — on the shipped example index, building a 3x3 grid of configurations takes
+about 9 ms against roughly 12.5 s to re-encode the same 16,100 rows.
+
+```python
+smaller = index.subsample(n_positive=1000, neg_to_pos_ratio=5.0, seed=42)
+```
+
+It returns a new index and never modifies the original, which matters when you loop over
+sizes: if each call shrank the receiver, the second run would start from the first run's
+leftovers and every later result would be quietly wrong. Corpus texts follow their own
+embedding rows, so explanations stay truthful.
+
 ## Testing for optimal Thresholds and data ratio's
 
 Usage of the 'examples\Example_Threshold_Script.py' script will allow for quick threshold checks for a variety of ratios, by default these are 10:1, 5:1 and 1:1 ratios. This has predefined example chat logs, and should, show optimal settings for the dataset being used based on an average score and average detection count.
@@ -317,11 +352,43 @@ pd.DataFrame(compare_aggregators(scored))
 pd.DataFrame(run_grid_search(index, groups, top_k_values=[3, 5, 10], min_score_values=[0.0, 0.1, 0.25]))
 ```
 
-Each result row reports three families of evaluation metrics, so you can tune for whatever matters to your use case:
+Two different things are called "metrics" here, and keeping them apart helps:
+
+- The **summarize metric** (the aggregator) is *how* a group's many per-observation scores become one number. This is what you sweep.
+- The **evaluation metric** is *how good* that separation turned out to be. You do not pick one — every row reports all three families below, so you can tune for whatever matters to your use case.
 
 - Ranking: `roc_auc`, `recall_at_n`, `precision_at_n`, `rank_ratio` (do known positives rank at the top?)
 - Threshold / classification: `precision`, `recall`, `f1`, `false_positive_rate` at a chosen (or automatically best‑F1) cutoff
 - Separation / distribution: `mean_separation`, `cohens_d`, `ks_statistic` (threshold‑free)
+
+### Sweeping the index itself
+
+The grid search can also vary the index, not just `top_k` and the threshold. Index size is
+usually the highest-leverage knob, and `subsample()` makes it cheap to explore:
+
+```python
+pd.DataFrame(run_grid_search(
+    index, groups,
+    n_positive_values=[1000, 5000, 10000],   # index size
+    neg_to_pos_ratios=[0.2, 1.0, 5.0],       # index balance
+    top_k_values=[3, 5, 10],
+    index_seed=42,                            # reproducible index configurations
+))
+```
+
+The arguments are ordered to match the loop nesting, which is itself ordered by cost:
+resizing the index is cheap, re-scoring is not, and thresholds and aggregators are free on
+the cached scores.
+
+**Observations are encoded once for the whole sweep.** An observation's embedding depends
+on the encoder, never on the index it is scored against, so re-encoding on every pass was
+recomputing identical numbers. On a 2x2x3 sweep over 320 observations this took a measured
+run from **2.99 s to 0.52 s, a 5.7x saving**, with byte-identical results. Pass
+`cache_observation_embeddings=False` if memory is tight.
+
+Rows report both the requested and actual index sizes, because a request is clipped when
+the index holds fewer examples than you asked for — without `index_n_positive_actual` two
+rows can look like a genuine size sweep while describing nearly the same index.
 
 See [examples/sentinel_against_hate.ipynb](examples/sentinel_against_hate.ipynb) for a worked example comparing aggregators on hate‑speech data.
 

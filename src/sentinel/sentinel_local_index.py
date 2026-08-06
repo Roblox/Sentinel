@@ -369,6 +369,7 @@ class SentinelLocalIndex:
         cls,
         positive_texts: List[str],
         negative_texts: List[str],
+        *,
         model_name: str = "all-MiniLM-L6-v2",
         neg_to_pos_ratio: Optional[float] = None,
         batch_size: int = 256,
@@ -478,6 +479,7 @@ class SentinelLocalIndex:
     def load(
         cls,
         path: str,
+        *,
         aws_access_key_id: Optional[str] = None,
         aws_secret_access_key: Optional[str] = None,
         negative_to_positive_ratio: Optional[float] = 5.0,
@@ -729,6 +731,8 @@ class SentinelLocalIndex:
     def calculate_rare_class_affinity(
         self,
         text_samples: List[str],
+        sample_embeddings: Optional[np.ndarray] = None,
+        *,
         top_k: int = 5,
         similarity_formula: Callable[[List[float], List[float]], float] = calculate_contrastive_score,
         # Function to aggregate individual scores into an overall affinity score
@@ -755,6 +759,12 @@ class SentinelLocalIndex:
 
         Args:
             text_samples: List of text strings to evaluate for rare class affinity.
+            sample_embeddings: Optional pre-computed embeddings for ``text_samples``, in
+                the same order. Supplying them skips the encoding step, which is the only
+                expensive part of this method. Embeddings depend on the encoder, not on
+                the index contents, so one set can be reused across many indices built
+                from the same model - see
+                :func:`sentinel.simulation.encode_observations`.
             top_k: Number of closest neighbors to consider when calculating the score.
             similarity_formula: Function to calculate individual similarity scores.
             aggregation_function: Function to aggregate individual scores into an overall score.
@@ -769,19 +779,31 @@ class SentinelLocalIndex:
         Returns:
             RareClassAffinityResult containing both the overall affinity score and
             individual observation scores for each text sample.
-        """
-        # Merge the default encoding kwargs with any additional ones provided
-        effective_encoding_kwargs = self.encoding_kwargs.copy()
-        effective_encoding_kwargs["show_progress_bar"] = show_progress_bar
-        effective_encoding_kwargs.update(encoding_additional_kwargs)
 
-        # Encode the input samples to get their embeddings
-        # We currently don't support multi-process encoding in this method, because it is meant for online scoring.
-        # We can add it if needed, probably by just allowing the caller to pass sample embeddings instead of text.
-        sample_embeddings = self.sentence_model.encode(
-            text_samples,
-            **effective_encoding_kwargs,
-        )
+        Raises:
+            ValueError: If ``sample_embeddings`` is supplied with a different number of
+                rows than ``text_samples``, which would silently score each observation
+                against the wrong embedding.
+        """
+        if sample_embeddings is None:
+            # Merge the default encoding kwargs with any additional ones provided
+            effective_encoding_kwargs = self.encoding_kwargs.copy()
+            effective_encoding_kwargs["show_progress_bar"] = show_progress_bar
+            effective_encoding_kwargs.update(encoding_additional_kwargs)
+
+            # Encode the input samples to get their embeddings.
+            # We currently don't support multi-process encoding in this method, because
+            # it is meant for online scoring.
+            sample_embeddings = self.sentence_model.encode(
+                text_samples,
+                **effective_encoding_kwargs,
+            )
+        elif len(sample_embeddings) != len(text_samples):
+            raise ValueError(
+                f"sample_embeddings has {len(sample_embeddings)} rows but text_samples "
+                f"has {len(text_samples)} entries. Scoring them together would pair each "
+                f"observation with the wrong embedding, so refusing to continue."
+            )
 
         # If we need to prevent exact matches (e.g., when scoring examples that are in the index),
         # request an additional neighbor so we can skip the exact match later

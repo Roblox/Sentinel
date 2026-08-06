@@ -58,7 +58,7 @@ Typical usage::
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Dict, List, Mapping, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 import numpy as np
 
@@ -127,11 +127,122 @@ class GroupObservationScores:
     observation_scores: np.ndarray
 
 
+# Columns run_grid_search attaches on top of whatever evaluate_groups returns. Every
+# index-describing column is prefixed, because evaluate_groups already returns an
+# "n_positive" meaning the number of positive *groups* in the evaluation set; an
+# unprefixed index size once overwrote it and silently turned evaluation metadata into
+# an index size. _add_columns turns any repeat of that mistake into an error.
+COLUMN_TOP_K = "top_k"
+COLUMN_INDEX_N_POSITIVE = "index_n_positive"
+COLUMN_INDEX_NEG_TO_POS_RATIO = "index_neg_to_pos_ratio"
+COLUMN_INDEX_N_POSITIVE_ACTUAL = "index_n_positive_actual"
+COLUMN_INDEX_N_NEGATIVE_ACTUAL = "index_n_negative_actual"
+
+GRID_SEARCH_COLUMNS = (
+    COLUMN_TOP_K,
+    COLUMN_INDEX_N_POSITIVE,
+    COLUMN_INDEX_NEG_TO_POS_RATIO,
+    COLUMN_INDEX_N_POSITIVE_ACTUAL,
+    COLUMN_INDEX_N_NEGATIVE_ACTUAL,
+)
+
+
+def _add_columns(row: Dict[str, Any], **columns: Any) -> Dict[str, Any]:
+    """Add columns to a result row, refusing to overwrite one that already exists.
+
+    Rows are plain dicts so they drop straight into ``pandas.DataFrame``, but that also
+    means a second write to the same key destroys the first with no error. That is how
+    an index size once replaced the positive-group count. Raising here turns a silent
+    data loss into a failing test.
+
+    Args:
+        row: The row to extend, modified in place.
+        **columns: Column name to value.
+
+    Returns:
+        The same row, for convenient chaining.
+
+    Raises:
+        ValueError: If any column is already present in the row.
+    """
+    clashes = sorted(name for name in columns if name in row)
+    if clashes:
+        raise ValueError(
+            f"Refusing to overwrite existing result column(s): {', '.join(clashes)}. "
+            f"Two different measurements are competing for one name; rename the new "
+            f"one rather than letting it replace the old value."
+        )
+    row.update(columns)
+    return row
+
+
+def encode_observations(
+    index: "SentinelLocalIndex",
+    groups: Sequence[LabeledGroup],
+    *,
+    show_progress_bar: bool = False,
+    encoding_additional_kwargs: Optional[Mapping[str, object]] = None,
+) -> Dict[str, np.ndarray]:
+    """Embed every group's observations once, so many scoring passes can share them.
+
+    Encoding is the only expensive step in a simulation, and an observation's embedding
+    depends on the encoder, never on the index it is scored against. A sweep that varies
+    index size, ratio or ``top_k`` therefore re-computes identical numbers on every pass
+    unless the embeddings are hoisted out, which is what this does.
+
+    The result stays valid across every index produced by
+    :meth:`~sentinel.sentinel_local_index.SentinelLocalIndex.subsample`, because a
+    subsampled copy shares the parent's sentence model and encoding kwargs.
+
+    Args:
+        index: A loaded :class:`~sentinel.sentinel_local_index.SentinelLocalIndex`.
+        groups: The labeled groups whose observations should be embedded.
+        show_progress_bar: Whether to show the encoder progress bar.
+        encoding_additional_kwargs: Extra keyword arguments forwarded to the encoder.
+
+    Returns:
+        Group name to the embeddings of that group's observations, in observation order.
+        Groups with no observations are omitted. Empty if ``index`` cannot encode on its
+        own, in which case callers simply fall back to encoding per pass.
+    """
+    if encoding_additional_kwargs is None:
+        encoding_additional_kwargs = {}
+
+    sentence_model = getattr(index, "sentence_model", None)
+    if sentence_model is None or not hasattr(index, "encoding_kwargs"):
+        # This harness deliberately accepts any index-like object, including test
+        # doubles that only implement calculate_rare_class_affinity. Those cannot be
+        # pre-encoded, so skip the optimisation rather than refusing to run.
+        LOG.debug(
+            "Index exposes no sentence model, so observations cannot be pre-encoded; "
+            "scoring will encode per pass."
+        )
+        return {}
+
+    encoding_kwargs = dict(index.encoding_kwargs)
+    encoding_kwargs["show_progress_bar"] = show_progress_bar
+    encoding_kwargs.update(encoding_additional_kwargs)
+
+    embeddings: Dict[str, np.ndarray] = {}
+    for group in groups:
+        observations = list(group.observations)
+        if not observations:
+            continue
+        embeddings[group.name] = sentence_model.encode(
+            observations,
+            **encoding_kwargs,
+        )
+
+    LOG.info("Encoded observations for %d groups", len(embeddings))
+    return embeddings
+
+
 def score_groups(
     index: "SentinelLocalIndex",
     groups: Sequence[LabeledGroup],
     *,
     top_k: int = 5,
+    observation_embeddings: Optional[Mapping[str, np.ndarray]] = None,
     show_progress_bar: bool = False,
     encoding_additional_kwargs: Optional[Mapping[str, object]] = None,
 ) -> List[GroupObservationScores]:
@@ -150,6 +261,10 @@ def score_groups(
         groups: The labeled groups to score.
         top_k: Number of nearest neighbors used per observation. Changing this
             changes the per-observation scores, so it requires re-scoring.
+        observation_embeddings: Optional embeddings from
+            :func:`encode_observations`, keyed by group name. Supplying them skips the
+            encoding step, which is what makes repeated scoring passes cheap. A group
+            missing from the mapping is encoded normally.
         show_progress_bar: Whether to show the encoder progress bar.
         encoding_additional_kwargs: Extra keyword arguments forwarded to the
             encoder.
@@ -177,6 +292,15 @@ def score_groups(
         # We only need the per-observation scores here, so we disable the
         # explainability extras for speed and pass a trivial aggregation
         # function (its output is ignored).
+        # Only forwarded when there is something to forward, so an index-like object
+        # that does not know about sample_embeddings keeps working unchanged.
+        cached = (
+            None
+            if observation_embeddings is None
+            else observation_embeddings.get(group.name)
+        )
+        cached_kwargs = {} if cached is None else {"sample_embeddings": cached}
+
         result = index.calculate_rare_class_affinity(
             observations,
             top_k=top_k,
@@ -186,6 +310,7 @@ def score_groups(
             explain=False,
             include_neighbors=False,
             encoding_additional_kwargs=encoding_additional_kwargs,
+            **cached_kwargs,
         )
 
         observation_scores = np.asarray(
@@ -537,15 +662,19 @@ def run_grid_search(
     index: "SentinelLocalIndex",
     groups: Sequence[LabeledGroup],
     *,
+    # What to sweep, outermost axis first, mirroring the loop nesting below.
+    n_positive_values: Optional[Sequence[int]] = None,
+    neg_to_pos_ratios: Optional[Sequence[float]] = None,
     top_k_values: Sequence[int] = (5,),
     min_score_values: Sequence[float] = (0.1,),
     aggregators: Optional[Mapping[str, Callable[[np.ndarray], float]]] = None,
+    # How each configuration is judged.
     top_n: Optional[int] = None,
     decision_threshold: Optional[float] = None,
-    show_progress_bar: bool = False,
-    n_positive_values: Optional[Sequence[int]] = None,
-    neg_to_pos_ratios: Optional[Sequence[float]] = None,
+    # Execution.
     index_seed: Optional[int] = None,
+    cache_observation_embeddings: bool = True,
+    show_progress_bar: bool = False,
 ) -> List[Dict[str, float]]:
     """Sweep hyperparameters and summarize metrics, returning a flat result table.
 
@@ -563,30 +692,32 @@ def run_grid_search(
 
     The returned rows are easy to turn into a ``pandas.DataFrame`` for plotting.
 
-    Cost warning: the number of scoring passes is
-    ``len(n_positive_values) x len(neg_to_pos_ratios) x len(top_k_values)``. A 7x7
-    size/ratio grid with three ``top_k`` values is 147 full passes. Note that the
-    observation texts are re-encoded on every pass even though their embeddings do
-    not depend on the index at all, so most of that cost is recomputing identical
-    numbers. Letting callers pass pre-computed sample embeddings would collapse it
-    to roughly one encoding pass; that is a separate change.
+    Cost: the sweep runs
+    ``len(n_positive_values) x len(neg_to_pos_ratios) x len(top_k_values)`` scoring
+    passes, so a 7x7 size/ratio grid with three ``top_k`` values is 147 of them. The
+    observations are encoded once up front and reused across all of them, because an
+    observation's embedding depends on the encoder rather than on the index being
+    varied. Each pass is then a nearest-neighbour search rather than a re-encode.
 
     Args:
         index: A loaded :class:`~sentinel.sentinel_local_index.SentinelLocalIndex`.
         groups: The labeled groups to evaluate.
+        n_positive_values: Index sizes to try, as counts of positive examples.
+            ``None`` (the default) means one pass using the index exactly as given.
+        neg_to_pos_ratios: Negative-to-positive ratios to try. ``None`` (the
+            default) means one pass using the index exactly as given.
         top_k_values: ``top_k`` values to try (each triggers a re-scoring).
         min_score_values: Per-observation thresholds to try (evaluated cheaply).
         aggregators: Name -> function map. Defaults to :data:`DEFAULT_AGGREGATORS`.
         top_n: Size of the top-N slice for recall@N / precision@N.
         decision_threshold: Cutoff for the classification family (``None`` =
             best-F1).
-        show_progress_bar: Whether to show the encoder progress bar.
-        n_positive_values: Index sizes to try, as counts of positive examples.
-            ``None`` (the default) means one pass using the index exactly as given.
-        neg_to_pos_ratios: Negative-to-positive ratios to try. ``None`` (the
-            default) means one pass using the index exactly as given.
         index_seed: Seed for the subsampling, so each index configuration is
             reproducible across runs.
+        cache_observation_embeddings: Whether to encode the observations once and reuse
+            them for every pass. Leave it on unless memory is tight: the cache holds one
+            embedding per observation, so a very large evaluation set can be sizeable.
+        show_progress_bar: Whether to show the encoder progress bar.
 
     Returns:
         A list of metric dicts, one per ``(n_positive, neg_to_pos_ratio, top_k,
@@ -616,6 +747,14 @@ def run_grid_search(
         list(neg_to_pos_ratios) if neg_to_pos_ratios is not None else [None]
     )
     total_configurations = len(positive_options) * len(ratio_options)
+
+    # Hoisted out of every loop below: subsampling changes which rows the index holds,
+    # never the encoder, so one set of observation embeddings serves the whole sweep.
+    cached_embeddings: Optional[Dict[str, np.ndarray]] = None
+    if cache_observation_embeddings:
+        cached_embeddings = encode_observations(
+            index, groups, show_progress_bar=show_progress_bar
+        )
 
     rows: List[Dict[str, float]] = []
     configuration = 0
@@ -659,6 +798,7 @@ def run_grid_search(
                     working_index,
                     groups,
                     top_k=top_k,
+                    observation_embeddings=cached_embeddings,
                     show_progress_bar=show_progress_bar,
                 )
                 for min_score in min_score_values:
@@ -671,16 +811,16 @@ def run_grid_search(
                             top_n=top_n,
                             decision_threshold=decision_threshold,
                         )
-                        row["top_k"] = int(top_k)
-                        # Every index-describing column is prefixed, because
-                        # evaluate_groups already returns an "n_positive" meaning the
-                        # number of positive *groups* in the evaluation set. Reusing
-                        # that name here overwrote it, silently replacing evaluation
-                        # metadata with an index size.
-                        row["index_n_positive"] = n_positive
-                        row["index_neg_to_pos_ratio"] = ratio
-                        row["index_n_positive_actual"] = n_positive_actual
-                        row["index_n_negative_actual"] = n_negative_actual
+                        _add_columns(
+                            row,
+                            **{
+                                COLUMN_TOP_K: int(top_k),
+                                COLUMN_INDEX_N_POSITIVE: n_positive,
+                                COLUMN_INDEX_NEG_TO_POS_RATIO: ratio,
+                                COLUMN_INDEX_N_POSITIVE_ACTUAL: n_positive_actual,
+                                COLUMN_INDEX_N_NEGATIVE_ACTUAL: n_negative_actual,
+                            },
+                        )
                         rows.append(row)
 
     return rows
