@@ -244,6 +244,13 @@ See the README for running the demo and mounting your own scripts.
 
 Most code needs no change. The breaking changes are deliberate and narrow.
 
+**Python 3.10 is now the minimum.** 1.0 declared support for 3.9, but never tested it - CI has
+run 3.10 to 3.12 only. That claim had also become impossible to honour: current `torch`
+requires 3.10 or newer, so a 3.9 install had to silently resolve to an older, untested torch.
+Raising the floor is a breaking change, which is why it belongs in a major release. Dropping
+3.9 also lets three backport packages go - `importlib-metadata`, `importlib-resources` and
+`zipp` - whose functionality is in the standard library from 3.10.
+
 **Arguments after the first are now keyword-only** on `calculate_rare_class_affinity`,
 `from_texts` and `load`. This is what lets a new argument sit in a logical place instead
 of being appended to an eleven-parameter list forever.
