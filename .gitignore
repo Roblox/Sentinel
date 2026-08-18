@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Generated documentation
+docs/build/
+
 # Vim and emacs files
 *~
 *.swp
