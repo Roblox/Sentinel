@@ -9,6 +9,7 @@ on:
     paths:
       - 'src/**/*.py'
       - 'docs/**'
+      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
@@ -17,9 +18,10 @@ permissions:
   id-token: write
   pull-requests: write
 
-# Allow only one concurrent deployment
+# One run per branch. The deploy job below takes the shared "pages" group, so a
+# docs check on another branch cannot cancel a deployment in flight.
 concurrency:
-  group: "pages"
+  group: docs-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -44,8 +46,10 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
+        # sentinel_local_index imports sentence_transformers at module level, so
+        # without the sbert extra autodoc cannot import the package at all.
         run: |
-          poetry install --with docs
+          poetry install --with docs --extras sbert
 
       - name: Check documentation sync
         run: |
@@ -72,4 +76,82 @@ jobs:
               repo: context.repo.repo,
               body: '⚠️ **Documentation is out of sync with the code!**\n\nPlease run `python docs/generate_docs.py` and commit the updated documentation files.'
             })
+
+      # Runs last so a build failure cannot trigger the out-of-sync comment above.
+      - name: Build documentation
+        shell: bash
+        run: |
+          cd ${{ github.workspace }}/docs
+          poetry run sphinx-build -b html source build/html | tee "$RUNNER_TEMP/sphinx.log"
+
+          # autodoc reports an unimportable module as a warning and sphinx-build
+          # still exits 0, which publishes pages of headings with no API content.
+          if grep -q "failed to import" "$RUNNER_TEMP/sphinx.log"; then
+            echo "::error::autodoc could not import a module, so the API pages would be empty"
+            exit 1
+          fi
+
+  publish-docs:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+
+    # Serialize deployments, and let one finish rather than cancelling it.
+    concurrency:
+      group: "pages"
+      cancel-in-progress: false
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        # sentinel_local_index imports sentence_transformers at module level, so
+        # without the sbert extra autodoc cannot import the package at all.
+        run: |
+          poetry install --with docs --extras sbert
+
+      - name: Generate RST files
+        run: |
+          cd ${{ github.workspace }}
+          poetry run python docs/generate_docs.py
+
+      - name: Build documentation
+        shell: bash
+        run: |
+          cd ${{ github.workspace }}/docs
+          poetry run sphinx-build -b html source build/html | tee "$RUNNER_TEMP/sphinx.log"
+
+          # autodoc reports an unimportable module as a warning and sphinx-build
+          # still exits 0, which publishes pages of headings with no API content.
+          if grep -q "failed to import" "$RUNNER_TEMP/sphinx.log"; then
+            echo "::error::autodoc could not import a module, so the API pages would be empty"
+            exit 1
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ github.workspace }}/docs/build/html
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 
